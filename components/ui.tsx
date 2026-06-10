@@ -33,6 +33,10 @@ const IP: Record<string, string[]> = {
   check: ["M20 6L9 17l-5-5"],
   x: ["M18 6L6 18", "M6 6l12 12"],
   "chev-r": ["M9 18l6-6-6-6"],
+  columns: [
+    "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z",
+    "M12 3v18",
+  ],
   "chev-l": ["M15 18l-6-6 6-6"],
   "chev-d": ["M6 9l6 6 6-6"],
   plus: ["M12 5v14", "M5 12h14"],

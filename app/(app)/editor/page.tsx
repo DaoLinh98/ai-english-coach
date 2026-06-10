@@ -120,6 +120,54 @@ function renderAnnotated(
   return parts;
 }
 
+function VersionPane({
+  label,
+  color,
+  text,
+}: {
+  label: string;
+  color: string;
+  text: string;
+}) {
+  return (
+    <div
+      style={{
+        background: "var(--surface)",
+        borderRadius: "var(--r4)",
+        border: "1.5px solid var(--bord2)",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          padding: "10px 16px",
+          borderBottom: "1px solid var(--bord2)",
+          fontSize: 12,
+          fontWeight: 700,
+          letterSpacing: ".3px",
+          textTransform: "uppercase",
+          color,
+          background: "var(--surf2)",
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          padding: "20px",
+          fontSize: 15,
+          lineHeight: 1.9,
+          color: "var(--t1)",
+          fontFamily: "var(--font)",
+          whiteSpace: "pre-wrap",
+        }}
+      >
+        {text}
+      </div>
+    </div>
+  );
+}
+
 function CorrectionCard({
   corr,
   isActive,
@@ -264,6 +312,7 @@ export default function EditorPage() {
   const [copyDone, setCopyDone] = React.useState(false);
   const [toast, setToast] = React.useState<string | null>(null);
   const [narrow, setNarrow] = React.useState(false);
+  const [compare, setCompare] = React.useState(false);
 
   React.useEffect(() => {
     const h = () => setNarrow(window.innerWidth < 960);
@@ -301,6 +350,7 @@ export default function EditorPage() {
       setAccepted(new Set());
       setActiveId(null);
       setFilterType("all");
+      setCompare(false);
       setMode("review");
     } catch {
       setMode("input");
@@ -489,23 +539,57 @@ export default function EditorPage() {
                     Accept All
                   </Button>
                 )}
+                <Button
+                  variant={compare ? "soft" : "ghost"}
+                  size="xs"
+                  icon="columns"
+                  onClick={() => setCompare((v) => !v)}
+                  style={{ marginLeft: "auto" }}
+                >
+                  {compare ? "Annotated view" : "Compare versions"}
+                </Button>
               </div>
 
-              <div
-                style={{
-                  background: "var(--surface)",
-                  borderRadius: "var(--r4)",
-                  border: "1.5px solid var(--bord2)",
-                  padding: "24px",
-                  fontSize: 15,
-                  lineHeight: 1.9,
-                  color: "var(--t1)",
-                  fontFamily: "var(--font)",
-                  whiteSpace: "pre-wrap",
-                }}
-              >
-                {renderAnnotated(analyzed, corrections, accepted, activeId, setActiveId)}
-              </div>
+              {compare ? (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: narrow ? "1fr" : "1fr 1fr",
+                    gap: 16,
+                  }}
+                >
+                  <VersionPane
+                    label="Original"
+                    color="var(--t3)"
+                    text={analyzed}
+                  />
+                  <VersionPane
+                    label={
+                      accepted.size === corrections.length
+                        ? "Improved"
+                        : `Improved (${accepted.size}/${corrections.length} applied)`
+                    }
+                    color="var(--green)"
+                    text={applyAccepted(analyzed, corrections, accepted)}
+                  />
+                </div>
+              ) : (
+                <div
+                  style={{
+                    background: "var(--surface)",
+                    borderRadius: "var(--r4)",
+                    border: "1.5px solid var(--bord2)",
+                    padding: "24px",
+                    fontSize: 15,
+                    lineHeight: 1.9,
+                    color: "var(--t1)",
+                    fontFamily: "var(--font)",
+                    whiteSpace: "pre-wrap",
+                  }}
+                >
+                  {renderAnnotated(analyzed, corrections, accepted, activeId, setActiveId)}
+                </div>
+              )}
 
               {corrections.length > 0 && (
                 <div style={{ marginTop: 14, padding: "12px 16px", background: "var(--bord2)", borderRadius: "var(--r3)", display: "flex", gap: 20, flexWrap: "wrap" }}>
