@@ -13,6 +13,7 @@ import {
   Segmented,
   type SegOption,
 } from "@/components/ui";
+import { exportFlashcards } from "@/lib/export";
 
 export type Flashcard = {
   id: string;
@@ -220,6 +221,21 @@ export function FlashcardsScreen({
 
   const reviewingCount = filtered.length - filtered.filter((c) => c.learned).length;
 
+  function handleExport() {
+    exportFlashcards(
+      cards.map((c) => ({
+        word: c.word,
+        pos: c.pos ?? "",
+        level: c.level,
+        context: c.context ?? "General",
+        def: c.def,
+        example: c.example ?? "",
+        synonyms: c.synonyms ?? [],
+        learned: c.learned,
+      })),
+    );
+  }
+
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       {/* Header */}
@@ -237,6 +253,11 @@ export function FlashcardsScreen({
             <Badge color="green" icon="check">
               {knownCount} Known
             </Badge>
+            {cards.length > 0 && (
+              <Button variant="secondary" size="sm" icon="download" onClick={handleExport}>
+                Export
+              </Button>
+            )}
           </div>
         </div>
 

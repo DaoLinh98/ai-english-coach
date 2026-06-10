@@ -24,6 +24,7 @@ import {
   locateCorrections,
   type LocatedCorrection,
 } from "@/lib/corrections";
+import { exportCorrection } from "@/lib/export";
 import { analyzeText } from "./actions";
 
 const SAMPLE_TEXT = `Hi team,
@@ -330,6 +331,12 @@ export default function EditorPage() {
     setTimeout(() => setCopyDone(false), 1500);
   }
 
+  function handleExport() {
+    const result = applyAccepted(analyzed, corrections, accepted);
+    exportCorrection(result, corrections);
+    showToast("Exported corrected text + explanations.");
+  }
+
   function handleReset() {
     setMode("input");
     setAccepted(new Set());
@@ -402,6 +409,9 @@ export default function EditorPage() {
                 style={copyDone ? { color: "var(--green)" } : {}}
               >
                 {copyDone ? "Copied!" : "Copy Text"}
+              </Button>
+              <Button variant="secondary" size="sm" icon="download" onClick={handleExport}>
+                Export
               </Button>
               <Button variant="ghost" size="sm" icon="refresh" onClick={handleReset}>
                 Reset
