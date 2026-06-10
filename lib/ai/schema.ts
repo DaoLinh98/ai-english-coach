@@ -69,3 +69,10 @@ export const generatedQuizSchema = z.object({
   questions: z.array(quizQuestionSchema).min(1),
 });
 export type GeneratedQuiz = z.infer<typeof generatedQuizSchema>;
+
+// ── Smart suggestions (next-sentence) ───────────────────────────────────────
+export const continuationSchema = z.object({
+  /** 1-3 natural next-sentence options that continue the user's draft. */
+  suggestions: z.array(z.string().min(1)).min(1).max(3),
+});
+export type Continuation = z.infer<typeof continuationSchema>;

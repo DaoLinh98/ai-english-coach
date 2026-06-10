@@ -25,7 +25,7 @@ import {
   type LocatedCorrection,
 } from "@/lib/corrections";
 import { exportCorrection } from "@/lib/export";
-import { analyzeText } from "./actions";
+import { analyzeText, suggestNext } from "./actions";
 
 const SAMPLE_TEXT = `Hi team,
 
@@ -313,6 +313,8 @@ export default function EditorPage() {
   const [toast, setToast] = React.useState<string | null>(null);
   const [narrow, setNarrow] = React.useState(false);
   const [compare, setCompare] = React.useState(false);
+  const [suggestions, setSuggestions] = React.useState<string[]>([]);
+  const [suggesting, setSuggesting] = React.useState(false);
 
   React.useEffect(() => {
     const h = () => setNarrow(window.innerWidth < 960);
@@ -356,6 +358,28 @@ export default function EditorPage() {
       setMode("input");
       showToast("Analysis failed — please try again.");
     }
+  }
+
+  async function handleSuggest() {
+    setSuggesting(true);
+    setSuggestions([]);
+    try {
+      const out = await suggestNext({ text, context, tone, level });
+      if (out.length === 0) showToast("Add some text first to get suggestions.");
+      setSuggestions(out);
+    } catch {
+      showToast("Couldn't fetch suggestions — please try again.");
+    } finally {
+      setSuggesting(false);
+    }
+  }
+
+  function applySuggestion(s: string) {
+    setText((prev) => {
+      const sep = prev.length === 0 || /\s$/.test(prev) ? "" : " ";
+      return `${prev}${sep}${s}`;
+    });
+    setSuggestions((prev) => prev.filter((x) => x !== s));
   }
 
   function handleAccept(id: number) {
@@ -504,8 +528,62 @@ export default function EditorPage() {
                 <Button variant="primary" size="md" icon="sparkles" onClick={handleAnalyze} disabled={!text.trim()}>
                   Analyze with AI
                 </Button>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  icon="zap"
+                  onClick={handleSuggest}
+                  loading={suggesting}
+                  disabled={!text.trim()}
+                >
+                  Suggest next sentence
+                </Button>
                 <span style={{ fontSize: 12, color: "var(--t3)" }}>{wordCount} words</span>
               </div>
+
+              {suggestions.length > 0 && (
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 8,
+                    padding: "14px 16px",
+                    background: "var(--amber-ll)",
+                    border: "1px solid var(--amber-l)",
+                    borderRadius: "var(--r3)",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <Icon name="zap" size={14} color="var(--amber-d)" />
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "var(--amber-dd)" }}>
+                      Smart suggestions — click to append
+                    </span>
+                  </div>
+                  {suggestions.map((s, i) => (
+                    <button
+                      key={i}
+                      onClick={() => applySuggestion(s)}
+                      style={{
+                        textAlign: "left",
+                        padding: "10px 12px",
+                        fontSize: 14,
+                        lineHeight: 1.5,
+                        fontFamily: "var(--font)",
+                        color: "var(--t1)",
+                        background: "var(--surface)",
+                        border: "1px solid var(--bord2)",
+                        borderRadius: "var(--r2)",
+                        cursor: "pointer",
+                        transition: "border-color var(--fast)",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--amber)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--bord2)")}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

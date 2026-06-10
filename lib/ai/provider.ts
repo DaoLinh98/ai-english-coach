@@ -1,4 +1,5 @@
 import type {
+  Continuation,
   CorrectionResult,
   GeneratedFlashcard,
   GeneratedQuiz,
@@ -37,10 +38,21 @@ export interface GenerateQuizInput {
   count?: number;
 }
 
+export interface SuggestContinuationInput {
+  /** The draft so far; the model proposes how to continue it. */
+  text: string;
+  context: CorrectContext;
+  tone: CorrectTone;
+  level: CorrectLevel;
+}
+
 export interface AiProvider {
   correctText(input: CorrectTextInput): Promise<CorrectionResult>;
   generateFlashcard(
     input: GenerateFlashcardInput,
   ): Promise<GeneratedFlashcard>;
   generateQuiz(input: GenerateQuizInput): Promise<GeneratedQuiz>;
+  suggestContinuation(
+    input: SuggestContinuationInput,
+  ): Promise<Continuation>;
 }
