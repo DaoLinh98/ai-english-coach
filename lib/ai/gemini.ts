@@ -1,11 +1,12 @@
 import { GoogleGenAI } from "@google/genai";
-import { correctionResultSchema } from "./schema";
+import { correctionResultSchema, generatedFlashcardSchema } from "./schema";
 import type {
   AiProvider,
   CorrectContext,
   CorrectLevel,
   CorrectTextInput,
   CorrectTone,
+  GenerateFlashcardInput,
 } from "./provider";
 
 const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
@@ -68,6 +69,22 @@ ${text}
 """`;
 }
 
+function buildFlashcardPrompt(input: GenerateFlashcardInput): string {
+  const ctx = input.context ? ` It is used in this context: "${input.context}".` : "";
+  return `Create an English vocabulary flashcard for the word or phrase: "${input.word}".${ctx}
+
+Return ONLY a JSON object (no markdown) with this exact shape:
+{
+  "word": string,        // the headword, cleaned up
+  "pos": string,         // part of speech, e.g. "verb", "noun", "adjective"
+  "level": "beginner" | "intermediate" | "advanced",
+  "context": string,     // one topical tag: "Technical", "Business", "Writing", or "General"
+  "def": string,         // a clear, concise definition
+  "example": string,     // one natural example sentence for a tech/office professional
+  "synonyms": string[]   // 3-4 synonyms or close alternatives
+}`;
+}
+
 function stripFences(raw: string): string {
   const trimmed = raw.trim();
   if (trimmed.startsWith("```")) {
@@ -104,6 +121,22 @@ export function createGeminiProvider(): AiProvider {
         throw new Error("AI returned a non-JSON response");
       }
       return correctionResultSchema.parse(parsed);
+    },
+
+    async generateFlashcard(input: GenerateFlashcardInput) {
+      const response = await ai.models.generateContent({
+        model: MODEL,
+        contents: buildFlashcardPrompt(input),
+        config: { responseMimeType: "application/json", temperature: 0.3 },
+      });
+      const raw = response.text ?? "";
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(stripFences(raw));
+      } catch {
+        throw new Error("AI returned a non-JSON response");
+      }
+      return generatedFlashcardSchema.parse(parsed);
     },
   };
 }
