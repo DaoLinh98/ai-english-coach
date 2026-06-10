@@ -8,7 +8,7 @@ import type {
   CorrectTone,
 } from "./provider";
 
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
 const CONTEXT_GUIDE: Record<CorrectContext, string> = {
   email: "a professional or semi-formal work email",
