@@ -31,3 +31,22 @@ export const correctionResultSchema = z.object({
   items: z.array(correctionItemSchema),
 });
 export type CorrectionResult = z.infer<typeof correctionResultSchema>;
+
+// ── Flashcard generation ────────────────────────────────────────────────────
+export const flashcardLevelSchema = z.enum([
+  "beginner",
+  "intermediate",
+  "advanced",
+]);
+
+export const generatedFlashcardSchema = z.object({
+  word: z.string().min(1),
+  pos: z.string(),
+  level: flashcardLevelSchema,
+  /** Topical tag, e.g. Technical | Business | Writing | General. */
+  context: z.string(),
+  def: z.string(),
+  example: z.string(),
+  synonyms: z.array(z.string()),
+});
+export type GeneratedFlashcard = z.infer<typeof generatedFlashcardSchema>;
