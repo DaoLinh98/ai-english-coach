@@ -26,9 +26,10 @@ export function Sidebar({
   onSignOut,
 }: {
   user?: SidebarUser;
-  onSignOut?: () => void;
+  onSignOut?: () => void | Promise<void>;
 }) {
   const pathname = usePathname();
+  const authed = !!user;
   const [compact, setCompact] = React.useState(false);
 
   React.useEffect(() => {
@@ -152,24 +153,49 @@ export function Sidebar({
                 {u.name}
               </div>
               <div style={{ fontSize: 11, color: "var(--t3)" }}>
-                {u.level}
-                {u.streak > 0 && (
+                {authed ? (
                   <>
-                    {" · "}
-                    <span style={{ color: "var(--amber-d)" }}>
-                      {u.streak} day streak
-                    </span>
+                    {u.level}
+                    {u.streak > 0 && (
+                      <>
+                        {" · "}
+                        <span style={{ color: "var(--amber-d)" }}>
+                          {u.streak} day streak
+                        </span>
+                      </>
+                    )}
                   </>
+                ) : (
+                  "Not signed in"
                 )}
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="xs"
-              icon="logout"
-              style={{ color: "var(--t3)", padding: "6px" }}
-              onClick={onSignOut}
-            />
+            {authed ? (
+              <Button
+                variant="ghost"
+                size="xs"
+                icon="logout"
+                title="Sign out"
+                style={{ color: "var(--t3)", padding: "6px" }}
+                onClick={() => onSignOut?.()}
+              />
+            ) : (
+              <Link
+                href="/login"
+                title="Sign in"
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: "var(--amber-d)",
+                  textDecoration: "none",
+                  padding: "6px 10px",
+                  borderRadius: "var(--r2)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Sign in
+              </Link>
+            )}
           </>
         )}
       </div>
