@@ -271,6 +271,14 @@ export default function EditorPage() {
     return () => window.removeEventListener("resize", h);
   }, []);
 
+  // Honor a ?context= preset (e.g. from the Dashboard "Quick Start" links).
+  React.useEffect(() => {
+    const c = new URLSearchParams(window.location.search).get("context");
+    if (c === "email" || c === "slack" || c === "jira" || c === "notes") {
+      setContext(c);
+    }
+  }, []);
+
   const remaining = corrections.filter((c) => !accepted.has(c.id));
   const filtered = filterType === "all" ? remaining : remaining.filter((c) => c.type === filterType);
   const grammarCount = remaining.filter((c) => c.type === "grammar").length;
