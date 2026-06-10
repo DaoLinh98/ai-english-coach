@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import {
+  continuationSchema,
   correctionResultSchema,
   generatedFlashcardSchema,
   generatedQuizSchema,
@@ -12,6 +13,7 @@ import type {
   CorrectTone,
   GenerateFlashcardInput,
   GenerateQuizInput,
+  SuggestContinuationInput,
 } from "./provider";
 
 const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
@@ -118,6 +120,22 @@ Return ONLY a JSON object (no markdown) with this exact shape:
 Provide exactly ${count} questions, each with exactly 4 options and one correct answer.`;
 }
 
+function buildContinuationPrompt(input: SuggestContinuationInput): string {
+  return `You are an English writing assistant helping a software/office professional continue their draft for ${CONTEXT_GUIDE[input.context]}. The tone should be ${TONE_GUIDE[input.tone]}. ${LEVEL_GUIDE[input.level]}
+
+Read the draft below and propose 2-3 natural next sentences that could come right after it. Each suggestion must be a complete, standalone sentence that flows from the existing text — do NOT rewrite or repeat what is already written.
+
+Return ONLY a JSON object (no markdown) with this exact shape:
+{
+  "suggestions": [string, string, string]   // 2-3 candidate next sentences
+}
+
+DRAFT SO FAR:
+"""
+${input.text}
+"""`;
+}
+
 function stripFences(raw: string): string {
   const trimmed = raw.trim();
   if (trimmed.startsWith("```")) {
@@ -186,6 +204,22 @@ export function createGeminiProvider(): AiProvider {
         throw new Error("AI returned a non-JSON response");
       }
       return generatedQuizSchema.parse(parsed);
+    },
+
+    async suggestContinuation(input: SuggestContinuationInput) {
+      const response = await ai.models.generateContent({
+        model: MODEL,
+        contents: buildContinuationPrompt(input),
+        config: { responseMimeType: "application/json", temperature: 0.7 },
+      });
+      const raw = response.text ?? "";
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(stripFences(raw));
+      } catch {
+        throw new Error("AI returned a non-JSON response");
+      }
+      return continuationSchema.parse(parsed);
     },
   };
 }
