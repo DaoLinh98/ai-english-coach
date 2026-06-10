@@ -1,5 +1,9 @@
 import { GoogleGenAI } from "@google/genai";
-import { correctionResultSchema, generatedFlashcardSchema } from "./schema";
+import {
+  correctionResultSchema,
+  generatedFlashcardSchema,
+  generatedQuizSchema,
+} from "./schema";
 import type {
   AiProvider,
   CorrectContext,
@@ -7,6 +11,7 @@ import type {
   CorrectTextInput,
   CorrectTone,
   GenerateFlashcardInput,
+  GenerateQuizInput,
 } from "./provider";
 
 const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
@@ -85,6 +90,34 @@ Return ONLY a JSON object (no markdown) with this exact shape:
 }`;
 }
 
+function buildQuizPrompt(input: GenerateQuizInput): string {
+  const count = input.count ?? 5;
+  const vocab = input.vocab?.length
+    ? `\nFavour these vocabulary words the learner is studying: ${input.vocab.slice(0, 12).join(", ")}.`
+    : "";
+  const mistakes = input.mistakes?.length
+    ? `\nTarget these recent mistakes the learner made (shown as wrong → right): ${input.mistakes.slice(0, 12).join("; ")}.`
+    : "";
+
+  return `Create a ${count}-question multiple-choice English quiz for a software/office professional.
+Mix the categories grammar, vocabulary, and style.${vocab}${mistakes}
+
+Return ONLY a JSON object (no markdown) with this exact shape:
+{
+  "questions": [
+    {
+      "category": "grammar" | "vocabulary" | "style",
+      "q": string,                 // the question
+      "opts": [string, string, string, string],  // exactly 4 options
+      "answer": number,            // index (0-3) of the correct option
+      "expl": string,              // why the answer is correct
+      "rule": string               // the rule/skill name
+    }
+  ]
+}
+Provide exactly ${count} questions, each with exactly 4 options and one correct answer.`;
+}
+
 function stripFences(raw: string): string {
   const trimmed = raw.trim();
   if (trimmed.startsWith("```")) {
@@ -137,6 +170,22 @@ export function createGeminiProvider(): AiProvider {
         throw new Error("AI returned a non-JSON response");
       }
       return generatedFlashcardSchema.parse(parsed);
+    },
+
+    async generateQuiz(input: GenerateQuizInput) {
+      const response = await ai.models.generateContent({
+        model: MODEL,
+        contents: buildQuizPrompt(input),
+        config: { responseMimeType: "application/json", temperature: 0.4 },
+      });
+      const raw = response.text ?? "";
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(stripFences(raw));
+      } catch {
+        throw new Error("AI returned a non-JSON response");
+      }
+      return generatedQuizSchema.parse(parsed);
     },
   };
 }

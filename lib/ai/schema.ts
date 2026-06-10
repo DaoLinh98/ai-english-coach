@@ -50,3 +50,22 @@ export const generatedFlashcardSchema = z.object({
   synonyms: z.array(z.string()),
 });
 export type GeneratedFlashcard = z.infer<typeof generatedFlashcardSchema>;
+
+// ── Quiz generation ─────────────────────────────────────────────────────────
+export const quizCategorySchema = z.enum(["grammar", "vocabulary", "style"]);
+
+export const quizQuestionSchema = z.object({
+  category: quizCategorySchema,
+  q: z.string(),
+  opts: z.array(z.string()).length(4),
+  /** Index (0-3) of the correct option. */
+  answer: z.number().int().min(0).max(3),
+  expl: z.string(),
+  rule: z.string(),
+});
+export type QuizQuestion = z.infer<typeof quizQuestionSchema>;
+
+export const generatedQuizSchema = z.object({
+  questions: z.array(quizQuestionSchema).min(1),
+});
+export type GeneratedQuiz = z.infer<typeof generatedQuizSchema>;

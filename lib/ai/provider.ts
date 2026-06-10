@@ -1,4 +1,8 @@
-import type { CorrectionResult, GeneratedFlashcard } from "./schema";
+import type {
+  CorrectionResult,
+  GeneratedFlashcard,
+  GeneratedQuiz,
+} from "./schema";
 
 /**
  * Provider-agnostic interface for the AI engine. The Gemini implementation
@@ -25,9 +29,18 @@ export interface GenerateFlashcardInput {
   context?: string;
 }
 
+export interface GenerateQuizInput {
+  /** The user's saved vocabulary, to anchor vocabulary questions. */
+  vocab?: string[];
+  /** Recent mistakes (e.g. "faces → faced"), to target weak spots. */
+  mistakes?: string[];
+  count?: number;
+}
+
 export interface AiProvider {
   correctText(input: CorrectTextInput): Promise<CorrectionResult>;
   generateFlashcard(
     input: GenerateFlashcardInput,
   ): Promise<GeneratedFlashcard>;
+  generateQuiz(input: GenerateQuizInput): Promise<GeneratedQuiz>;
 }
