@@ -1,26 +1,290 @@
 @import "tailwindcss";
 
+/* ===========================================================================
+   AI English Coach — design tokens (ported from prototype tokens.css).
+   Font is provided by next/font (Plus Jakarta Sans) via the --font-jakarta
+   CSS variable set on <html>; we alias it to --font below.
+   =========================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  --font: var(--font-jakarta), system-ui, sans-serif;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  /* Brand — Amber / Orange */
+  --amber: #f59e0b;
+  --amber-d: #d97706;
+  --amber-dd: #b45309;
+  --amber-l: #fef3c7;
+  --amber-ll: #fffbeb;
+  --orange: #fb923c;
+  --orange-d: #ea580c;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Neutrals */
+  --bg: #eef0f5;
+  --surface: #ffffff;
+  --surf2: #f9fafb;
+  --border: #e5e7eb;
+  --bord2: #f3f4f6;
+
+  /* Text */
+  --t1: #111827;
+  --t2: #4b5563;
+  --t3: #9ca3af;
+  --t4: #d1d5db;
+
+  /* Semantic */
+  --red: #dc2626;
+  --red-l: #fef2f2;
+  --red-ll: #fecaca;
+  --green: #059669;
+  --green-l: #ecfdf5;
+  --green-ll: #a7f3d0;
+  --blue: #2563eb;
+  --blue-l: #eff6ff;
+  --blue-ll: #bfdbfe;
+  --purple: #7c3aed;
+  --purp-l: #ede9fe;
+
+  /* Layout */
+  --sw: 252px;
+  --swc: 68px;
+
+  /* Radius */
+  --r1: 4px;
+  --r2: 6px;
+  --r3: 10px;
+  --r4: 14px;
+  --r5: 20px;
+  --rmax: 9999px;
+
+  /* Shadow */
+  --sh1: 0 1px 3px rgba(0, 0, 0, 0.07), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --sh2: 0 4px 14px rgba(0, 0, 0, 0.09), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --sh3: 0 8px 28px rgba(0, 0, 0, 0.11), 0 4px 10px rgba(0, 0, 0, 0.06);
+
+  /* Motion */
+  --fast: 120ms;
+  --base: 210ms;
+  --slow: 360ms;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--t1);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.6;
+  font-size: 15px;
+  height: 100vh;
+  overflow: hidden;
+}
+#root {
+  height: 100vh;
+  display: flex;
+  overflow: hidden;
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--t4);
+}
+
+/* ── Correction underlines ─────────────────────────────── */
+.c-g {
+  text-decoration: underline wavy var(--red);
+  text-underline-offset: 3px;
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0 1px;
+  transition: background var(--fast);
+}
+.c-v {
+  text-decoration: underline wavy var(--amber-d);
+  text-underline-offset: 3px;
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0 1px;
+  transition: background var(--fast);
+}
+.c-s {
+  text-decoration: underline wavy var(--blue);
+  text-underline-offset: 3px;
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0 1px;
+  transition: background var(--fast);
+}
+.c-g:hover,
+.c-g.hi {
+  background: var(--red-l);
+}
+.c-v:hover,
+.c-v.hi {
+  background: var(--amber-ll);
+}
+.c-s:hover,
+.c-s.hi {
+  background: var(--blue-l);
+}
+.c-ok {
+  text-decoration: none;
+  color: var(--green);
+  font-weight: 600;
+  background: var(--green-l);
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+/* ── Animations ────────────────────────────────────────── */
+@keyframes fadeUp {
+  from {
+    transform: translateY(10px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes shimmer {
+  from {
+    background-position: -600px 0;
+  }
+  to {
+    background-position: 600px 0;
+  }
+}
+@keyframes popIn {
+  from {
+    transform: scale(0.93);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+@keyframes bounceIn {
+  0% {
+    transform: scale(0.8);
+  }
+  70% {
+    transform: scale(1.04);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .a-up {
+    animation: fadeUp var(--slow) var(--ease) forwards;
+  }
+  .a-pop {
+    animation: popIn var(--base) var(--spring) forwards;
+  }
+  .a-bounce {
+    animation: bounceIn 0.4s var(--spring) forwards;
+  }
+}
+.a-d1 {
+  animation-delay: 50ms;
+}
+.a-d2 {
+  animation-delay: 100ms;
+}
+.a-d3 {
+  animation-delay: 160ms;
+}
+.a-d4 {
+  animation-delay: 220ms;
+}
+.a-d5 {
+  animation-delay: 280ms;
+}
+.a-d6 {
+  animation-delay: 340ms;
+}
+
+.skel {
+  background: linear-gradient(
+    90deg,
+    var(--bord2) 25%,
+    var(--border) 50%,
+    var(--bord2) 75%
+  );
+  background-size: 600px 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: var(--r2);
+}
+
+/* ── Card flip ─────────────────────────────────────────── */
+.flip-scene {
+  perspective: 1200px;
+}
+.flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.62s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-style: preserve-3d;
+}
+.flip-inner.flipped {
+  transform: rotateY(180deg);
+}
+.flip-f,
+.flip-b {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  border-radius: var(--r4);
+}
+.flip-b {
+  transform: rotateY(180deg);
+  opacity: 0;
+  pointer-events: none;
+}
+.flip-inner.flipped .flip-b {
+  opacity: 1;
+  pointer-events: auto;
+}
+.flip-inner.flipped .flip-f {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ── Utility ───────────────────────────────────────────── */
+.lift {
+  transition: transform var(--base) var(--ease), box-shadow var(--base)
+    var(--ease);
+}
+.lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--sh3) !important;
+}
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

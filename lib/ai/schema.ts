@@ -1,0 +1,33 @@
+import { z } from "zod";
+
+/**
+ * Structured output contracts for the AI layer. Every Gemini call returns
+ * JSON validated against these schemas, so screens receive typed objects
+ * (never free text). The editor's correction-item shape mirrors the
+ * prototype's `CORR` records (minus start/end, which the client computes by
+ * locating `find` within the original text).
+ */
+
+export const correctionTypeSchema = z.enum(["grammar", "style", "vocab"]);
+export type CorrectionType = z.infer<typeof correctionTypeSchema>;
+
+export const correctionItemSchema = z.object({
+  /** Exact substring of the original text that should be replaced. */
+  find: z.string().min(1),
+  /** Replacement text. */
+  suggest: z.string(),
+  type: correctionTypeSchema,
+  /** Short human label, e.g. "Subject-verb agreement". */
+  label: z.string(),
+  /** One- or two-sentence explanation of the correction. */
+  expl: z.string(),
+  /** The grammar/style rule name, e.g. "Passive Voice". */
+  rule: z.string(),
+});
+export type CorrectionItem = z.infer<typeof correctionItemSchema>;
+
+export const correctionResultSchema = z.object({
+  correctedText: z.string(),
+  items: z.array(correctionItemSchema),
+});
+export type CorrectionResult = z.infer<typeof correctionResultSchema>;
