@@ -95,3 +95,56 @@ export function exportCorrection(correctedText: string, corrections: LocatedCorr
 export function exportFlashcards(cards: ExportableFlashcard[]): void {
   triggerDownload(`flashcards-${timestamp()}.md`, buildFlashcardsMarkdown(cards));
 }
+
+export type LearningData = {
+  email: string;
+  name: string;
+  level: string;
+  preferredStyle: string;
+  weeklyGoal: number;
+  learningGoals: string[];
+  vocabulary: string[];
+  stats: { streak: number; totalWords: number; accuracy: number | null };
+  prefs: Record<string, boolean>;
+};
+
+/** Build a Markdown summary of the user's profile, preferences and progress. */
+export function buildLearningDataMarkdown(d: LearningData): string {
+  const lines: string[] = [];
+  lines.push("# AI English Coach — Learning Data Export", "");
+
+  lines.push("## Profile");
+  if (d.name) lines.push(`- **Name:** ${d.name}`);
+  if (d.email) lines.push(`- **Email:** ${d.email}`);
+  lines.push(`- **English level:** ${d.level}`);
+  lines.push(`- **Preferred style:** ${d.preferredStyle}`);
+  lines.push("");
+
+  lines.push("## Progress");
+  lines.push(`- **Day streak:** ${d.stats.streak}`);
+  lines.push(`- **Total words improved:** ${d.stats.totalWords}`);
+  lines.push(`- **Quiz accuracy:** ${d.stats.accuracy === null ? "—" : `${d.stats.accuracy}%`}`);
+  lines.push("");
+
+  lines.push("## Goals");
+  lines.push(`- **Weekly word goal:** ${d.weeklyGoal}`);
+  if (d.learningGoals.length) {
+    lines.push("- **Learning goals:**");
+    d.learningGoals.forEach((g) => lines.push(`  - ${g}`));
+  }
+  lines.push("");
+
+  lines.push("## Preferences");
+  Object.entries(d.prefs).forEach(([k, v]) => lines.push(`- **${k}:** ${v ? "on" : "off"}`));
+  lines.push("");
+
+  lines.push("## Saved Vocabulary");
+  if (d.vocabulary.length) d.vocabulary.forEach((w) => lines.push(`- ${w}`));
+  else lines.push("_No saved words yet._");
+
+  return lines.join("\n");
+}
+
+export function exportLearningData(d: LearningData): void {
+  triggerDownload(`learning-data-${timestamp()}.md`, buildLearningDataMarkdown(d));
+}

@@ -2,7 +2,7 @@ import { getSessionUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { SettingsScreen } from "@/components/screens/SettingsScreen";
 import { SignInPrompt } from "@/components/SignInPrompt";
-import { updateProfile, addVocab, removeVocab } from "./actions";
+import { updateProfile, addVocab, removeVocab, requestPasswordReset } from "./actions";
 import { signOut } from "@/app/(auth)/actions";
 
 type HistoryRow = { created_at: string; output_text: string };
@@ -85,6 +85,7 @@ export default async function SettingsPage() {
       updateProfile={updateProfile}
       addVocab={addVocab}
       removeVocab={removeVocab}
+      requestPasswordReset={requestPasswordReset}
       signOut={signOut}
     />
   );
