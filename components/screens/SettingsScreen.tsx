@@ -113,6 +113,7 @@ export function SettingsScreen({
   email,
   profile,
   vocab,
+  stats,
   updateProfile,
   addVocab,
   removeVocab,
@@ -121,6 +122,7 @@ export function SettingsScreen({
   email: string;
   profile: Profile | null;
   vocab: string[];
+  stats: { streak: number; totalWords: number; accuracy: number | null };
   updateProfile: (patch: ProfilePatch) => Promise<void>;
   addVocab: (term: string) => Promise<void>;
   removeVocab: (term: string) => Promise<void>;
@@ -266,6 +268,9 @@ export function SettingsScreen({
                   <div>
                     <p style={{ fontSize: 13, fontWeight: 600, color: "var(--t1)", marginBottom: 4 }}>Profile Photo</p>
                     <p style={{ fontSize: 12, color: "var(--t3)", marginBottom: 8 }}>Generated from your initials</p>
+                    <Button variant="secondary" size="xs" disabled title="Coming soon">
+                      Upload Photo
+                    </Button>
                   </div>
                 </div>
                 <SettingRow
@@ -318,6 +323,22 @@ export function SettingsScreen({
                     />
                   }
                 />
+              </SectionCard>
+
+              <SectionCard title="Streak & Stats" sub="Your learning progress">
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, padding: "12px 0 8px" }}>
+                  {[
+                    { label: "Day Streak", value: String(stats.streak), icon: "flame" as IconName, color: "var(--orange)" },
+                    { label: "Total Words", value: stats.totalWords.toLocaleString(), icon: "trend-up" as IconName, color: "var(--green)" },
+                    { label: "Accuracy", value: stats.accuracy === null ? "—" : `${stats.accuracy}%`, icon: "target" as IconName, color: "var(--blue)" },
+                  ].map((s) => (
+                    <div key={s.label} style={{ background: "var(--surf2)", borderRadius: "var(--r3)", padding: "14px", textAlign: "center" }}>
+                      <Icon name={s.icon} size={20} color={s.color} style={{ marginBottom: 6 }} />
+                      <p style={{ fontSize: 20, fontWeight: 800, color: "var(--t1)", letterSpacing: "-.5px" }}>{s.value}</p>
+                      <p style={{ fontSize: 11, color: "var(--t3)", marginTop: 2 }}>{s.label}</p>
+                    </div>
+                  ))}
+                </div>
               </SectionCard>
             </div>
           )}
