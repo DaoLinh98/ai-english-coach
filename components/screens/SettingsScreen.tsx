@@ -6,6 +6,7 @@ import React from "react";
 import { Avatar, Button, Icon, Segmented, Toggle, type IconName } from "@/components/ui";
 import type { Profile } from "@/lib/auth";
 import type { ProfilePatch } from "@/app/(app)/settings/actions";
+import { exportLearningData } from "@/lib/export";
 
 const GOALS = [
   "Email writing",
@@ -117,6 +118,7 @@ export function SettingsScreen({
   updateProfile,
   addVocab,
   removeVocab,
+  requestPasswordReset,
   signOut,
 }: {
   email: string;
@@ -126,6 +128,7 @@ export function SettingsScreen({
   updateProfile: (patch: ProfilePatch) => Promise<void>;
   addVocab: (term: string) => Promise<void>;
   removeVocab: (term: string) => Promise<void>;
+  requestPasswordReset: () => Promise<void>;
   signOut: () => Promise<void>;
 }) {
   const [tab, setTab] = React.useState<"profile" | "learning" | "goals" | "account">("profile");
@@ -143,6 +146,7 @@ export function SettingsScreen({
   const [vocabList, setVocabList] = React.useState<string[]>(vocab);
   const [newWord, setNewWord] = React.useState("");
   const [saved, setSaved] = React.useState(false);
+  const [pwMsg, setPwMsg] = React.useState<string | null>(null);
   const [, startTransition] = React.useTransition();
 
   const TABS: { id: typeof tab; icon: IconName; label: string }[] = [
@@ -191,6 +195,33 @@ export function SettingsScreen({
   function handleRemoveWord(w: string) {
     setVocabList((l) => l.filter((x) => x !== w));
     startTransition(() => removeVocab(w));
+  }
+
+  function handleChangePassword() {
+    setPwMsg(null);
+    startTransition(async () => {
+      try {
+        await requestPasswordReset();
+        setPwMsg("Reset link sent to your email");
+      } catch {
+        setPwMsg("Couldn't send reset link — try again");
+      }
+      setTimeout(() => setPwMsg(null), 4000);
+    });
+  }
+
+  function handleExportData() {
+    exportLearningData({
+      email,
+      name,
+      level,
+      preferredStyle: style_,
+      weeklyGoal,
+      learningGoals: [...goals],
+      vocabulary: vocabList,
+      stats,
+      prefs: prefs as unknown as Record<string, boolean>,
+    });
   }
 
   return (
@@ -471,6 +502,29 @@ export function SettingsScreen({
 
               <SectionCard title="Account" sub="Manage your account settings">
                 <div style={{ padding: "12px 0 8px", display: "flex", flexDirection: "column", gap: 10 }}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon="eye"
+                    full
+                    style={{ justifyContent: "flex-start", gap: 10 }}
+                    onClick={handleChangePassword}
+                  >
+                    Change Password
+                  </Button>
+                  {pwMsg && (
+                    <p style={{ fontSize: 12, color: "var(--t3)", margin: "-2px 0 2px 2px" }}>{pwMsg}</p>
+                  )}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon="download"
+                    full
+                    style={{ justifyContent: "flex-start", gap: 10 }}
+                    onClick={handleExportData}
+                  >
+                    Export Learning Data
+                  </Button>
                   <Button
                     variant="secondary"
                     size="sm"

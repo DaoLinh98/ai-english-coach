@@ -54,3 +54,11 @@ export async function removeVocab(term: string) {
     .eq("term", term);
   revalidatePath("/settings");
 }
+
+/** Send a Supabase password-reset email to the signed-in user's address. */
+export async function requestPasswordReset() {
+  const { supabase, user } = await requireUser();
+  if (!user.email) throw new Error("No email address on this account");
+  const { error } = await supabase.auth.resetPasswordForEmail(user.email);
+  if (error) throw new Error(error.message);
+}
