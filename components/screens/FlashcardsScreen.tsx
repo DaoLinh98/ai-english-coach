@@ -158,6 +158,8 @@ export function FlashcardsScreen({
   const [filter, setFilter] = React.useState("all");
   const [search, setSearch] = React.useState("");
   const [done, setDone] = React.useState(false);
+  const [known, setKnown] = React.useState<Set<string>>(new Set());
+  const [studying, setStudying] = React.useState<Set<string>>(new Set());
   const [queue, setQueue] = React.useState<string[]>([]);
   const [importing, setImporting] = React.useState(false);
   const [, startTransition] = React.useTransition();
@@ -185,6 +187,8 @@ export function FlashcardsScreen({
     setIdx(0);
     setFlipped(false);
     setDone(false);
+    setKnown(new Set());
+    setStudying(new Set());
   }, [filter, search]);
 
   function persistLearned(id: string, learned: boolean) {
@@ -192,7 +196,25 @@ export function FlashcardsScreen({
   }
 
   function goNext(action: "know" | "study") {
-    if (card) persistLearned(card.id, action === "know");
+    if (card) {
+      const id = card.id;
+      if (action === "know") {
+        setKnown((p) => new Set([...p, id]));
+        setStudying((p) => {
+          const next = new Set(p);
+          next.delete(id);
+          return next;
+        });
+      } else {
+        setStudying((p) => new Set([...p, id]));
+        setKnown((p) => {
+          const next = new Set(p);
+          next.delete(id);
+          return next;
+        });
+      }
+      persistLearned(id, action === "know");
+    }
     setFlipped(false);
     setTimeout(() => {
       if (idx + 1 >= filtered.length) setDone(true);
@@ -204,6 +226,8 @@ export function FlashcardsScreen({
     setIdx(0);
     setFlipped(false);
     setDone(false);
+    setKnown(new Set());
+    setStudying(new Set());
     router.refresh();
   }
 
@@ -252,6 +276,9 @@ export function FlashcardsScreen({
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <Badge color="green" icon="check">
               {knownCount} Known
+            </Badge>
+            <Badge color="amber" icon="refresh">
+              {studying.size} Reviewing
             </Badge>
             {cards.length > 0 && (
               <Button variant="secondary" size="sm" icon="download" onClick={handleExport}>
@@ -362,6 +389,17 @@ export function FlashcardsScreen({
             <p style={{ color: "var(--t3)", fontSize: 14, marginBottom: 24 }}>
               You reviewed {filtered.length} card{filtered.length !== 1 ? "s" : ""}
             </p>
+            <div style={{ display: "flex", justifyContent: "center", gap: 20, marginBottom: 28 }}>
+              <div style={{ textAlign: "center" }}>
+                <p style={{ fontSize: 28, fontWeight: 800, color: "var(--green)" }}>{known.size}</p>
+                <p style={{ fontSize: 12, color: "var(--t3)" }}>Known</p>
+              </div>
+              <div style={{ width: 1, background: "var(--bord2)" }} />
+              <div style={{ textAlign: "center" }}>
+                <p style={{ fontSize: 28, fontWeight: 800, color: "var(--amber-d)" }}>{studying.size}</p>
+                <p style={{ fontSize: 12, color: "var(--t3)" }}>Need Review</p>
+              </div>
+            </div>
             <Button variant="primary" size="md" icon="refresh" onClick={restart} full>
               Study Again
             </Button>
@@ -384,7 +422,7 @@ export function FlashcardsScreen({
                     height: 7,
                     borderRadius: "var(--rmax)",
                     cursor: "pointer",
-                    background: c.learned ? "var(--green)" : i === idx ? "var(--amber)" : "var(--border)",
+                    background: known.has(c.id) || c.learned ? "var(--green)" : i === idx ? "var(--amber)" : "var(--border)",
                     transition: "all var(--base)",
                   }}
                 />
