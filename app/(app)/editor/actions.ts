@@ -9,32 +9,6 @@ import type {
 } from "@/lib/ai";
 import { createClient } from "@/lib/supabase/server";
 
-export type SuggestNextInput = {
-  text: string;
-  context: CorrectContext;
-  tone: CorrectTone;
-  level: CorrectLevel;
-};
-
-/**
- * Server Action: propose 2-3 next sentences that continue the user's draft.
- * Anonymous-friendly (no persistence); the Gemini key stays server-side.
- */
-export async function suggestNext(
-  input: SuggestNextInput,
-): Promise<string[]> {
-  const text = input.text?.trim();
-  if (!text) return [];
-  const ai = getAiProvider();
-  const result = await ai.suggestContinuation({
-    text,
-    context: input.context,
-    tone: input.tone,
-    level: input.level,
-  });
-  return result.suggestions;
-}
-
 export type AnalyzeInput = {
   text: string;
   context: CorrectContext;

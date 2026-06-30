@@ -1,68 +1,50 @@
 "use client";
-// app/(app)/editor/page.tsx — Text editor with inline AI corrections.
-// Ported from prototype screen-editor.jsx; mock data replaced with the
-// analyzeText Server Action (Gemini) and client-computed offsets.
 
 import React from "react";
-import {
-  Badge,
-  Button,
-  EmptyState,
-  Icon,
-  ProgressBar,
-  Segmented,
-  Spinner,
-  type SegOption,
-} from "@/components/ui";
-import type {
-  CorrectContext,
-  CorrectLevel,
-  CorrectTone,
-} from "@/lib/ai";
-import {
-  applyAccepted,
-  locateCorrections,
-  type LocatedCorrection,
-} from "@/lib/corrections";
-import { exportCorrection } from "@/lib/export";
-import { analyzeText, suggestNext } from "./actions";
+import { Button, EmptyState, Icon, Spinner } from "@/components/ui";
 
-const SAMPLE_TEXT = `Hi team,
+const STOP_WORDS = new Set([
+  "the","and","that","have","this","with","from","they","will","been","their",
+  "what","when","make","like","time","just","into","than","then","some","could",
+  "other","would","there","more","also","about","which","after","before","because",
+  "should","between","through","during","always","often","never","every","without",
+  "however","although","therefore","furthermore","additionally","nevertheless",
+  "information","available","different","important","following","including",
+  "another","already","whether","together","something","everything","anything",
+  "someone","anyone","everyone","nothing","within","across","against","around",
+  "these","those","where","while","since","still","being","having","doing",
+  "working","getting","making","using","taking","giving","going","coming","looking",
+  "please","thank","regards","sincerely","attached","ensure","provide",
+]);
 
-I want inform you that the development team already finish the Sprint 12 implementation last week. We faces some challenges during the testing phase, and the critical bugs needs to be fix before we can deploy to the production environment. The impacts on end users will be minimal if we can resolve these issues quick.
+type Mode = "input" | "loading" | "result";
 
-Please let me know if you have any questions.
+interface EditorState {
+  inputText: string;
+  translatedText: string;
+  mode: Mode;
+}
 
-Best regards,
-Alex`;
+const SESSION_KEY = "editorState";
 
-const CONTEXTS: { value: CorrectContext; label: string; icon: string }[] = [
-  { value: "email", label: "Email", icon: "mail" },
-  { value: "slack", label: "Slack", icon: "msg-sq" },
-  { value: "jira", label: "Jira", icon: "file-txt" },
-  { value: "notes", label: "Notes", icon: "clipboard" },
-];
-const TONES: SegOption<CorrectTone>[] = [
-  { value: "professional", label: "Professional" },
-  { value: "casual", label: "Casual" },
-  { value: "persuasive", label: "Persuasive" },
-];
-const LEVELS: SegOption<CorrectLevel>[] = [
-  { value: "beginner", label: "Beginner" },
-  { value: "intermediate", label: "Intermediate" },
-  { value: "advanced", label: "Advanced" },
-];
+function extractVocab(text: string): string[] {
+  const words = text.toLowerCase().match(/\b[a-z]{7,}\b/g) ?? [];
+  return [...new Set(words)].filter((w) => !STOP_WORDS.has(w)).slice(0, 14);
+}
 
-const TYPE_META: Record<
-  LocatedCorrection["type"],
-  { label: string; color: string; bg: string; badgeColor: "red" | "blue" | "amber" }
-> = {
-  grammar: { label: "Grammar", color: "var(--red)", bg: "var(--red-l)", badgeColor: "red" },
-  style: { label: "Style", color: "var(--blue)", bg: "var(--blue-l)", badgeColor: "blue" },
-  vocab: { label: "Vocabulary", color: "var(--amber-d)", bg: "var(--amber-ll)", badgeColor: "amber" },
-};
+function loadSession(): Partial<EditorState> {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (raw) return JSON.parse(raw) as Partial<EditorState>;
+  } catch {}
+  return {};
+}
 
-type Mode = "input" | "loading" | "review";
+function saveSession(state: EditorState) {
+  try {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(state));
+  } catch {}
+}
 
 function queueFlashcard(word: string) {
   try {
@@ -70,251 +52,31 @@ function queueFlashcard(word: string) {
     const cur: string[] = JSON.parse(localStorage.getItem(key) || "[]");
     if (!cur.includes(word)) cur.push(word);
     localStorage.setItem(key, JSON.stringify(cur));
-  } catch {
-    // ignore storage failures
-  }
-}
-
-function renderAnnotated(
-  text: string,
-  corrections: LocatedCorrection[],
-  accepted: Set<number>,
-  activeId: number | null,
-  onSelect: (id: number) => void,
-) {
-  const sorted = [...corrections].sort((a, b) => a.start - b.start);
-  const parts: React.ReactNode[] = [];
-  let pos = 0;
-
-  for (const c of sorted) {
-    if (c.start > pos) {
-      parts.push(
-        <React.Fragment key={`t${pos}`}>{text.slice(pos, c.start)}</React.Fragment>,
-      );
-    }
-    if (accepted.has(c.id)) {
-      parts.push(
-        <span key={`c${c.id}`} className="c-ok">
-          {c.suggest}
-        </span>,
-      );
-    } else {
-      const cls = `c-${c.type === "grammar" ? "g" : c.type === "style" ? "s" : "v"}${
-        activeId === c.id ? " hi" : ""
-      }`;
-      parts.push(
-        <span
-          key={`c${c.id}`}
-          className={cls}
-          title={`Suggestion: ${c.suggest}`}
-          onClick={() => onSelect(c.id)}
-        >
-          {text.slice(c.start, c.end)}
-        </span>,
-      );
-    }
-    pos = c.end;
-  }
-  if (pos < text.length)
-    parts.push(<React.Fragment key="tend">{text.slice(pos)}</React.Fragment>);
-  return parts;
-}
-
-function VersionPane({
-  label,
-  color,
-  text,
-}: {
-  label: string;
-  color: string;
-  text: string;
-}) {
-  return (
-    <div
-      style={{
-        background: "var(--surface)",
-        borderRadius: "var(--r4)",
-        border: "1.5px solid var(--bord2)",
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          padding: "10px 16px",
-          borderBottom: "1px solid var(--bord2)",
-          fontSize: 12,
-          fontWeight: 700,
-          letterSpacing: ".3px",
-          textTransform: "uppercase",
-          color,
-          background: "var(--surf2)",
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          padding: "20px",
-          fontSize: 15,
-          lineHeight: 1.9,
-          color: "var(--t1)",
-          fontFamily: "var(--font)",
-          whiteSpace: "pre-wrap",
-        }}
-      >
-        {text}
-      </div>
-    </div>
-  );
-}
-
-function CorrectionCard({
-  corr,
-  isActive,
-  isAccepted,
-  onAccept,
-  onLearn,
-  onSelect,
-}: {
-  corr: LocatedCorrection;
-  isActive: boolean;
-  isAccepted: boolean;
-  onAccept: (id: number) => void;
-  onLearn: (corr: LocatedCorrection) => void;
-  onSelect: (id: number) => void;
-}) {
-  const meta = TYPE_META[corr.type] || TYPE_META.grammar;
-  const cardRef = React.useRef<HTMLDivElement>(null);
-
-  React.useEffect(() => {
-    if (isActive && cardRef.current) {
-      cardRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }
-  }, [isActive]);
-
-  return (
-    <div
-      ref={cardRef}
-      onClick={() => onSelect(corr.id)}
-      style={{
-        borderRadius: "var(--r3)",
-        border: `1.5px solid ${isActive ? meta.color : "var(--bord2)"}`,
-        padding: "14px 16px",
-        cursor: "pointer",
-        transition: "all var(--fast)",
-        background: isAccepted ? "var(--green-l)" : isActive ? meta.bg : "var(--surface)",
-        opacity: isAccepted ? 0.7 : 1,
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          gap: 8,
-          marginBottom: 8,
-        }}
-      >
-        <div style={{ flex: 1 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-            <Badge color={meta.badgeColor} size="xs">
-              {meta.label}
-            </Badge>
-            {isAccepted && (
-              <Badge color="green" size="xs">
-                Accepted
-              </Badge>
-            )}
-          </div>
-          <p style={{ fontSize: 13, fontWeight: 600, color: "var(--t1)" }}>{corr.label}</p>
-        </div>
-        <div style={{ flexShrink: 0, marginTop: 2 }}>
-          {isAccepted ? (
-            <Icon name="check" size={16} color="var(--green)" />
-          ) : (
-            <Icon name="chev-r" size={14} color="var(--t4)" />
-          )}
-        </div>
-      </div>
-
-      {/* Before / After */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          marginBottom: 10,
-          padding: "8px 10px",
-          background: "var(--surf2)",
-          borderRadius: "var(--r2)",
-        }}
-      >
-        <span style={{ fontSize: 13, color: "var(--red)", textDecoration: "line-through", flex: 1 }}>
-          {corr.find}
-        </span>
-        <Icon name="arr-r" size={12} color="var(--t4)" />
-        <span style={{ fontSize: 13, color: "var(--green)", fontWeight: 600, flex: 1 }}>
-          {corr.suggest}
-        </span>
-      </div>
-
-      {/* Explanation */}
-      <p style={{ fontSize: 12, color: "var(--t2)", lineHeight: 1.55, marginBottom: 10 }}>
-        {corr.expl}
-      </p>
-
-      {/* Rule tag */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <Badge color="gray" size="xs" icon="info">
-          {corr.rule}
-        </Badge>
-        {!isAccepted && (
-          <div style={{ display: "flex", gap: 6 }}>
-            <Button
-              size="xs"
-              variant="ghost"
-              style={{ color: "var(--t3)", padding: "4px 8px" }}
-              onClick={(e) => {
-                e.stopPropagation();
-                onLearn(corr);
-              }}
-            >
-              Learn
-            </Button>
-            <Button
-              size="xs"
-              variant="soft"
-              onClick={(e) => {
-                e.stopPropagation();
-                onAccept(corr.id);
-              }}
-            >
-              Accept
-            </Button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  } catch {}
 }
 
 export default function EditorPage() {
-  const [text, setText] = React.useState(SAMPLE_TEXT);
-  const [analyzed, setAnalyzed] = React.useState("");
-  const [mode, setMode] = React.useState<Mode>("input");
-  const [corrections, setCorrections] = React.useState<LocatedCorrection[]>([]);
-  const [accepted, setAccepted] = React.useState<Set<number>>(new Set());
-  const [activeId, setActiveId] = React.useState<number | null>(null);
-  const [context, setContext] = React.useState<CorrectContext>("email");
-  const [tone, setTone] = React.useState<CorrectTone>("professional");
-  const [level, setLevel] = React.useState<CorrectLevel>("intermediate");
-  const [filterType, setFilterType] = React.useState<"all" | "grammar" | "style" | "vocab">("all");
-  const [copyDone, setCopyDone] = React.useState(false);
+  const [inputText, setInputText] = React.useState<string>(() => {
+    const saved = loadSession();
+    return saved.inputText ?? "";
+  });
+  const [translatedText, setTranslatedText] = React.useState<string>(() => {
+    const saved = loadSession();
+    return saved.translatedText ?? "";
+  });
+  const [mode, setMode] = React.useState<Mode>(() => {
+    const saved = loadSession();
+    const m = saved.mode;
+    return m && m !== "loading" ? m : "input";
+  });
+  const [vocabSuggestions, setVocabSuggestions] = React.useState<string[]>(() => {
+    const saved = loadSession();
+    return saved.translatedText ? extractVocab(saved.translatedText) : [];
+  });
+  const [addedWords, setAddedWords] = React.useState<Set<string>>(new Set());
   const [toast, setToast] = React.useState<string | null>(null);
   const [narrow, setNarrow] = React.useState(false);
-  const [compare, setCompare] = React.useState(false);
-  const [suggestions, setSuggestions] = React.useState<string[]>([]);
-  const [suggesting, setSuggesting] = React.useState(false);
+  const [copyDone, setCopyDone] = React.useState(false);
 
   React.useEffect(() => {
     const h = () => setNarrow(window.innerWidth < 960);
@@ -323,192 +85,119 @@ export default function EditorPage() {
     return () => window.removeEventListener("resize", h);
   }, []);
 
-  // Honor a ?context= preset (e.g. from the Dashboard "Quick Start" links).
+  // Persist session on change
   React.useEffect(() => {
-    const c = new URLSearchParams(window.location.search).get("context");
-    if (c === "email" || c === "slack" || c === "jira" || c === "notes") {
-      setContext(c);
-    }
-  }, []);
-
-  const remaining = corrections.filter((c) => !accepted.has(c.id));
-  const filtered = filterType === "all" ? remaining : remaining.filter((c) => c.type === filterType);
-  const grammarCount = remaining.filter((c) => c.type === "grammar").length;
-  const styleCount = remaining.filter((c) => c.type === "style").length;
-  const vocabCount = remaining.filter((c) => c.type === "vocab").length;
+    saveSession({ inputText, translatedText, mode });
+  }, [inputText, translatedText, mode]);
 
   function showToast(msg: string) {
     setToast(msg);
     setTimeout(() => setToast(null), 2500);
   }
 
-  async function handleAnalyze() {
-    const snapshot = text;
+  async function handleTranslate() {
+    const text = inputText.trim();
+    if (!text) return;
+
     setMode("loading");
+    setTranslatedText("");
+    setVocabSuggestions([]);
+    setAddedWords(new Set());
+
     try {
-      const result = await analyzeText({ text: snapshot, context, tone, level });
-      setAnalyzed(snapshot);
-      setCorrections(locateCorrections(snapshot, result.items));
-      setAccepted(new Set());
-      setActiveId(null);
-      setFilterType("all");
-      setCompare(false);
-      setMode("review");
+      const res = await fetch("/api/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+
+      if (!res.ok || !res.body) {
+        setMode("input");
+        showToast("Translation failed — please try again.");
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let full = "";
+      setMode("result");
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        full += decoder.decode(value, { stream: true });
+        setTranslatedText(full);
+      }
+
+      setVocabSuggestions(extractVocab(full));
     } catch {
       setMode("input");
-      showToast("Analysis failed — please try again.");
+      showToast("Translation failed — please try again.");
     }
-  }
-
-  async function handleSuggest() {
-    setSuggesting(true);
-    setSuggestions([]);
-    try {
-      const out = await suggestNext({ text, context, tone, level });
-      if (out.length === 0) showToast("Add some text first to get suggestions.");
-      setSuggestions(out);
-    } catch {
-      showToast("Couldn't fetch suggestions — please try again.");
-    } finally {
-      setSuggesting(false);
-    }
-  }
-
-  function applySuggestion(s: string) {
-    setText((prev) => {
-      const sep = prev.length === 0 || /\s$/.test(prev) ? "" : " ";
-      return `${prev}${sep}${s}`;
-    });
-    setSuggestions((prev) => prev.filter((x) => x !== s));
-  }
-
-  function handleAccept(id: number) {
-    setAccepted((prev) => new Set([...prev, id]));
-    const next = remaining.find((c) => c.id !== id);
-    setActiveId(next ? next.id : null);
-  }
-
-  function handleAcceptAll() {
-    setAccepted(new Set(corrections.map((c) => c.id)));
-    setActiveId(null);
-  }
-
-  function handleLearn(corr: LocatedCorrection) {
-    queueFlashcard(corr.suggest);
-    showToast(`"${corr.suggest}" added to Flashcards!`);
-  }
-
-  function handleCopy() {
-    const result = applyAccepted(analyzed, corrections, accepted);
-    navigator.clipboard.writeText(result).catch(() => {});
-    setCopyDone(true);
-    setTimeout(() => setCopyDone(false), 1500);
-  }
-
-  function handleExport() {
-    const result = applyAccepted(analyzed, corrections, accepted);
-    exportCorrection(result, corrections);
-    showToast("Exported corrected text + explanations.");
   }
 
   function handleReset() {
     setMode("input");
-    setAccepted(new Set());
-    setActiveId(null);
-    setCorrections([]);
-    if (analyzed) setText(analyzed);
+    setTranslatedText("");
+    setVocabSuggestions([]);
+    setAddedWords(new Set());
+    try { sessionStorage.removeItem(SESSION_KEY); } catch {}
   }
 
-  const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+  function handleCopy() {
+    navigator.clipboard.writeText(translatedText).catch(() => {});
+    setCopyDone(true);
+    setTimeout(() => setCopyDone(false), 1500);
+  }
+
+  function handleAddFlashcard(word: string) {
+    queueFlashcard(word);
+    setAddedWords((prev) => new Set([...prev, word]));
+    showToast(`"${word}" added to Flashcards!`);
+  }
+
+  const wordCount = inputText.trim().split(/\s+/).filter(Boolean).length;
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       {/* Top bar */}
-      <div style={{ flexShrink: 0, borderBottom: "1px solid var(--bord2)", background: "var(--surface)" }}>
-        <div style={{ padding: "14px 24px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-          {/* Context tabs */}
-          <div style={{ display: "flex", gap: 2, background: "var(--bord2)", borderRadius: "var(--r3)", padding: 3 }}>
-            {CONTEXTS.map((c) => (
-              <button
-                key={c.value}
-                onClick={() => setContext(c.value)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 5,
-                  padding: "6px 13px",
-                  fontSize: 13,
-                  fontWeight: context === c.value ? 600 : 500,
-                  border: "none",
-                  borderRadius: "var(--r2)",
-                  cursor: "pointer",
-                  fontFamily: "var(--font)",
-                  background: context === c.value ? "var(--surface)" : "transparent",
-                  color: context === c.value ? "var(--t1)" : "var(--t3)",
-                  boxShadow: context === c.value ? "var(--sh1)" : "none",
-                  transition: "all var(--fast)",
-                }}
-              >
-                <Icon name={c.icon} size={13} />
-                {c.label}
-              </button>
-            ))}
+      <div style={{ flexShrink: 0, borderBottom: "1px solid var(--bord2)", background: "var(--surface)", padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 32, height: 32, borderRadius: "var(--r3)", background: "linear-gradient(135deg, var(--amber), var(--orange))", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Icon name="sparkles" size={15} color="#fff" />
           </div>
-
-          <div style={{ width: 1, height: 24, background: "var(--bord2)" }} />
-
-          {/* Tone */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Icon name="sliders" size={14} color="var(--t3)" />
-            <span style={{ fontSize: 12, color: "var(--t3)", fontWeight: 500 }}>Tone</span>
-            <Segmented options={TONES} value={tone} onChange={setTone} size="sm" />
+          <div>
+            <p style={{ fontWeight: 700, fontSize: 15, color: "var(--t1)", lineHeight: 1.2 }}>Translate &amp; Fix</p>
+            <p style={{ fontSize: 11, color: "var(--t3)" }}>Paste Vietnamese or mixed text — get fluent English</p>
           </div>
-
-          <div style={{ width: 1, height: 24, background: "var(--bord2)" }} />
-
-          {/* Level */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Icon name="grad-cap" size={14} color="var(--t3)" />
-            <span style={{ fontSize: 12, color: "var(--t3)", fontWeight: 500 }}>Level</span>
-            <Segmented options={LEVELS} value={level} onChange={setLevel} size="sm" />
-          </div>
-
-          {mode === "review" && (
-            <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={copyDone ? "check" : "copy"}
-                onClick={handleCopy}
-                style={copyDone ? { color: "var(--green)" } : {}}
-              >
-                {copyDone ? "Copied!" : "Copy Text"}
-              </Button>
-              <Button variant="secondary" size="sm" icon="download" onClick={handleExport}>
-                Export
-              </Button>
-              <Button variant="ghost" size="sm" icon="refresh" onClick={handleReset}>
-                Reset
-              </Button>
-            </div>
-          )}
         </div>
+        {mode === "result" && (
+          <div style={{ display: "flex", gap: 8 }}>
+            <Button variant="secondary" size="sm" icon={copyDone ? "check" : "copy"} onClick={handleCopy} style={copyDone ? { color: "var(--green)" } : {}}>
+              {copyDone ? "Copied!" : "Copy"}
+            </Button>
+            <Button variant="ghost" size="sm" icon="refresh" onClick={handleReset}>
+              Reset
+            </Button>
+          </div>
+        )}
       </div>
 
-      {/* Body: editor + panel */}
+      {/* Body */}
       <div style={{ flex: 1, display: "flex", flexDirection: narrow ? "column" : "row", overflow: "hidden" }}>
-        {/* Editor area */}
-        <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "24px" }}>
-          {mode === "input" && (
+        {/* Main editor / result area */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", padding: "24px" }}>
+          {(mode === "input" || mode === "loading") && (
             <div className="a-up" style={{ height: "100%", display: "flex", flexDirection: "column", gap: 16 }}>
               <textarea
-                value={text}
-                onChange={(e) => setText(e.target.value)}
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
                 spellCheck={false}
-                placeholder="Paste or type your text here…"
+                placeholder="Paste or type your text here… (tiếng Việt or English or cả hai đều được)"
+                disabled={mode === "loading"}
                 style={{
                   flex: 1,
-                  minHeight: 320,
+                  minHeight: 300,
                   padding: "20px",
                   fontSize: 15,
                   lineHeight: 1.8,
@@ -520,273 +209,143 @@ export default function EditorPage() {
                   outline: "none",
                   background: "var(--surface)",
                   transition: "border-color var(--fast)",
+                  opacity: mode === "loading" ? 0.5 : 1,
                 }}
                 onFocus={(e) => (e.target.style.borderColor = "var(--amber)")}
                 onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
               />
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <Button variant="primary" size="md" icon="sparkles" onClick={handleAnalyze} disabled={!text.trim()}>
-                  Analyze with AI
-                </Button>
                 <Button
-                  variant="secondary"
+                  variant="primary"
                   size="md"
-                  icon="zap"
-                  onClick={handleSuggest}
-                  loading={suggesting}
-                  disabled={!text.trim()}
+                  icon="sparkles"
+                  onClick={handleTranslate}
+                  loading={mode === "loading"}
+                  disabled={!inputText.trim() || mode === "loading"}
                 >
-                  Suggest next sentence
+                  {mode === "loading" ? "Translating…" : "Translate & Fix"}
                 </Button>
                 <span style={{ fontSize: 12, color: "var(--t3)" }}>{wordCount} words</span>
               </div>
-
-              {suggestions.length > 0 && (
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 8,
-                    padding: "14px 16px",
-                    background: "var(--amber-ll)",
-                    border: "1px solid var(--amber-l)",
-                    borderRadius: "var(--r3)",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <Icon name="zap" size={14} color="var(--amber-d)" />
-                    <span style={{ fontSize: 12, fontWeight: 700, color: "var(--amber-dd)" }}>
-                      Smart suggestions — click to append
-                    </span>
-                  </div>
-                  {suggestions.map((s, i) => (
-                    <button
-                      key={i}
-                      onClick={() => applySuggestion(s)}
-                      style={{
-                        textAlign: "left",
-                        padding: "10px 12px",
-                        fontSize: 14,
-                        lineHeight: 1.5,
-                        fontFamily: "var(--font)",
-                        color: "var(--t1)",
-                        background: "var(--surface)",
-                        border: "1px solid var(--bord2)",
-                        borderRadius: "var(--r2)",
-                        cursor: "pointer",
-                        transition: "border-color var(--fast)",
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--amber)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--bord2)")}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
           )}
 
-          {mode === "loading" && (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 20 }}>
-              <div style={{ width: 56, height: 56, borderRadius: "var(--r5)", background: "var(--amber-ll)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Spinner size={28} color="var(--amber-d)" />
-              </div>
-              <div style={{ textAlign: "center" }}>
-                <p style={{ fontWeight: 700, fontSize: 16, color: "var(--t1)" }}>Analyzing your text…</p>
-                <p style={{ fontSize: 13, color: "var(--t3)", marginTop: 4 }}>Checking grammar, vocabulary &amp; style</p>
-              </div>
-              <div style={{ width: 200 }}>
-                <ProgressBar value={66} color="var(--amber)" height={4} />
-              </div>
-            </div>
-          )}
-
-          {mode === "review" && (
-            <div className="a-up">
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-                <Badge color={remaining.length === 0 ? "green" : "amber"}>
-                  {corrections.length === 0
-                    ? "No issues found — looks great!"
-                    : remaining.length === 0
-                      ? "All corrections applied!"
-                      : `${remaining.length} suggestion${remaining.length !== 1 ? "s" : ""} remaining`}
-                </Badge>
-                {remaining.length > 0 && (
-                  <Button variant="soft" size="xs" onClick={handleAcceptAll}>
-                    Accept All
-                  </Button>
-                )}
-                <Button
-                  variant={compare ? "soft" : "ghost"}
-                  size="xs"
-                  icon="columns"
-                  onClick={() => setCompare((v) => !v)}
-                  style={{ marginLeft: "auto" }}
-                >
-                  {compare ? "Annotated view" : "Compare versions"}
-                </Button>
-              </div>
-
-              {compare ? (
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: narrow ? "1fr" : "1fr 1fr",
-                    gap: 16,
-                  }}
-                >
-                  <VersionPane
-                    label="Original"
-                    color="var(--t3)"
-                    text={analyzed}
-                  />
-                  <VersionPane
-                    label={
-                      accepted.size === corrections.length
-                        ? "Improved"
-                        : `Improved (${accepted.size}/${corrections.length} applied)`
-                    }
-                    color="var(--green)"
-                    text={applyAccepted(analyzed, corrections, accepted)}
-                  />
+          {mode === "result" && (
+            <div className="a-up" style={{ height: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
+              {/* Original (collapsed) */}
+              <details style={{ flexShrink: 0 }}>
+                <summary style={{ fontSize: 12, fontWeight: 600, color: "var(--t3)", cursor: "pointer", userSelect: "none", padding: "4px 0" }}>
+                  Original text
+                </summary>
+                <div style={{ marginTop: 8, padding: "14px 16px", background: "var(--surf2)", borderRadius: "var(--r3)", border: "1px solid var(--bord2)", fontSize: 14, color: "var(--t3)", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
+                  {inputText}
                 </div>
-              ) : (
+              </details>
+
+              {/* Translated result */}
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--green)", display: "inline-block" }} />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "var(--t2)", textTransform: "uppercase", letterSpacing: ".4px" }}>English Result</span>
+                </div>
                 <div
                   style={{
-                    background: "var(--surface)",
-                    borderRadius: "var(--r4)",
-                    border: "1.5px solid var(--bord2)",
-                    padding: "24px",
+                    flex: 1,
+                    padding: "20px",
                     fontSize: 15,
                     lineHeight: 1.9,
                     color: "var(--t1)",
                     fontFamily: "var(--font)",
+                    background: "var(--surface)",
+                    border: "1.5px solid var(--bord2)",
+                    borderRadius: "var(--r4)",
+                    overflowY: "auto",
                     whiteSpace: "pre-wrap",
                   }}
                 >
-                  {renderAnnotated(analyzed, corrections, accepted, activeId, setActiveId)}
+                  {translatedText}
+                  {/* blinking cursor while streaming */}
+                  {mode === "result" && translatedText.length > 0 && (
+                    <span className="stream-cursor" />
+                  )}
                 </div>
-              )}
+              </div>
 
-              {corrections.length > 0 && (
-                <div style={{ marginTop: 14, padding: "12px 16px", background: "var(--bord2)", borderRadius: "var(--r3)", display: "flex", gap: 20, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 12, color: "var(--t3)" }}>Click underlined text to see corrections</span>
-                  <div style={{ display: "flex", gap: 12 }}>
-                    <span style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>
-                      <span style={{ width: 10, height: 3, background: "var(--red)", display: "inline-block", borderRadius: 2 }} />
-                      Grammar
-                    </span>
-                    <span style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>
-                      <span style={{ width: 10, height: 3, background: "var(--amber-d)", display: "inline-block", borderRadius: 2 }} />
-                      Vocabulary
-                    </span>
-                    <span style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>
-                      <span style={{ width: 10, height: 3, background: "var(--blue)", display: "inline-block", borderRadius: 2 }} />
-                      Style
-                    </span>
-                  </div>
-                </div>
-              )}
+              <Button variant="ghost" size="sm" onClick={handleReset} style={{ alignSelf: "flex-start" }}>
+                ← Edit original
+              </Button>
             </div>
           )}
         </div>
 
-        {/* Corrections panel */}
+        {/* Vocabulary panel */}
         <div
           style={{
-            width: narrow ? "100%" : 320,
+            width: narrow ? "100%" : 300,
             flexShrink: 0,
             borderLeft: narrow ? "none" : "1px solid var(--bord2)",
             borderTop: narrow ? "1px solid var(--bord2)" : "none",
             overflowY: "auto",
-            overflowX: "hidden",
             background: "var(--surf2)",
             display: "flex",
             flexDirection: "column",
           }}
         >
-          <div style={{ padding: "16px 16px 10px", borderBottom: "1px solid var(--bord2)", background: "var(--surface)", flexShrink: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-              <p style={{ fontWeight: 700, fontSize: 14, color: "var(--t1)" }}>Suggestions</p>
-              {mode === "review" && corrections.length > 0 && <Badge color="amber">{corrections.length} total</Badge>}
-            </div>
-            {mode === "review" && corrections.length > 0 && (
-              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                {[
-                  { type: "all" as const, label: `All (${remaining.length})` },
-                  { type: "grammar" as const, label: `Grammar (${grammarCount})` },
-                  { type: "style" as const, label: `Style (${styleCount})` },
-                  { type: "vocab" as const, label: `Vocab (${vocabCount})` },
-                ].map((f) => (
-                  <button
-                    key={f.type}
-                    onClick={() => setFilterType(f.type)}
-                    style={{
-                      padding: "4px 10px",
-                      fontSize: 12,
-                      fontWeight: filterType === f.type ? 600 : 500,
-                      border: "1px solid",
-                      borderRadius: "var(--rmax)",
-                      cursor: "pointer",
-                      fontFamily: "var(--font)",
-                      transition: "all var(--fast)",
-                      background: filterType === f.type ? "var(--amber)" : "transparent",
-                      borderColor: filterType === f.type ? "var(--amber)" : "var(--border)",
-                      color: filterType === f.type ? "#fff" : "var(--t2)",
-                    }}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-            )}
+          <div style={{ padding: "14px 16px 10px", borderBottom: "1px solid var(--bord2)", background: "var(--surface)", flexShrink: 0 }}>
+            <p style={{ fontWeight: 700, fontSize: 14, color: "var(--t1)" }}>Vocabulary</p>
+            <p style={{ fontSize: 12, color: "var(--t3)", marginTop: 2 }}>Add new words to your Flashcards</p>
           </div>
 
-          <div style={{ flex: 1, padding: 12, display: "flex", flexDirection: "column", gap: 10, overflowY: "auto" }}>
+          <div style={{ flex: 1, padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
             {mode === "input" && (
               <EmptyState
-                icon="sparkles"
-                title="Analyze to see suggestions"
-                subtitle="Paste your text and click 'Analyze with AI' to get correction suggestions."
+                icon="book"
+                title="No vocabulary yet"
+                subtitle="Translate your text to see vocabulary suggestions."
               />
             )}
-            {mode === "loading" &&
-              [1, 2, 3].map((i) => (
-                <div key={i} style={{ background: "var(--surface)", borderRadius: "var(--r3)", border: "1px solid var(--bord2)", padding: 16 }}>
-                  <div className="skel" style={{ height: 12, width: "60%", marginBottom: 10 }} />
-                  <div className="skel" style={{ height: 10, width: "90%", marginBottom: 6 }} />
-                  <div className="skel" style={{ height: 10, width: "75%" }} />
-                </div>
-              ))}
-            {mode === "review" && remaining.length === 0 && (
-              <div style={{ textAlign: "center", padding: 32 }}>
-                <div style={{ width: 48, height: 48, background: "var(--green-l)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-                  <Icon name="check" size={22} color="var(--green)" />
-                </div>
-                <p style={{ fontWeight: 700, fontSize: 15, color: "var(--t1)" }}>
-                  {corrections.length === 0 ? "Looks great!" : "All done!"}
-                </p>
-                <p style={{ fontSize: 13, color: "var(--t3)", marginTop: 4 }}>
-                  {corrections.length === 0
-                    ? "No corrections were suggested."
-                    : "All corrections have been applied."}
-                </p>
+            {mode === "loading" && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1, gap: 10, flexDirection: "column", color: "var(--t3)" }}>
+                <Spinner size={20} color="var(--amber)" />
+                <span style={{ fontSize: 12 }}>Extracting vocabulary…</span>
               </div>
             )}
-            {mode === "review" &&
-              filtered.map((c, i) => (
-                <div key={c.id} className={`a-up a-d${Math.min(i + 1, 6)}`}>
-                  <CorrectionCard
-                    corr={c}
-                    isActive={activeId === c.id}
-                    isAccepted={accepted.has(c.id)}
-                    onAccept={handleAccept}
-                    onLearn={handleLearn}
-                    onSelect={setActiveId}
-                  />
+            {mode === "result" && vocabSuggestions.length === 0 && (
+              <EmptyState
+                icon="check"
+                title="No new vocabulary"
+                subtitle="No notable vocabulary suggestions for this text."
+              />
+            )}
+            {mode === "result" && vocabSuggestions.map((word) => {
+              const added = addedWords.has(word);
+              return (
+                <div
+                  key={word}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "10px 12px",
+                    background: added ? "var(--green-l)" : "var(--surface)",
+                    border: `1px solid ${added ? "var(--green)" : "var(--bord2)"}`,
+                    borderRadius: "var(--r3)",
+                    transition: "all var(--fast)",
+                  }}
+                >
+                  <span style={{ fontSize: 14, fontWeight: 600, color: added ? "var(--green)" : "var(--t1)", fontFamily: "var(--font)" }}>
+                    {word}
+                  </span>
+                  {added ? (
+                    <Icon name="check" size={15} color="var(--green)" />
+                  ) : (
+                    <Button size="xs" variant="soft" onClick={() => handleAddFlashcard(word)}>
+                      + Add
+                    </Button>
+                  )}
                 </div>
-              ))}
+              );
+            })}
           </div>
         </div>
       </div>
