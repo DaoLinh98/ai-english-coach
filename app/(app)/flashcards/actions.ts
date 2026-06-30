@@ -29,6 +29,55 @@ export async function deleteFlashcard(id: string) {
   revalidatePath("/flashcards");
 }
 
+/**
+ * Directly generate and save a flashcard for a word/phrase from the Editor.
+ * Called immediately when the user clicks "+ Add" — no localStorage queue needed.
+ */
+export async function addFlashcardDirect(
+  phrase: string,
+): Promise<{ success: boolean; message: string }> {
+  const w = phrase.trim();
+  if (!w) return { success: false, message: "Empty phrase" };
+
+  let supabase: Awaited<ReturnType<typeof createClient>>;
+  let userId: string;
+  try {
+    const auth = await requireUser();
+    supabase = auth.supabase;
+    userId = auth.user.id;
+  } catch {
+    return { success: false, message: "Sign in to save flashcards" };
+  }
+
+  // Duplicate check
+  const { data: existing } = await supabase
+    .from("flashcards")
+    .select("id")
+    .eq("user_id", userId)
+    .ilike("word", w)
+    .limit(1);
+  if (existing && existing.length > 0) {
+    return { success: false, message: `"${w}" is already in your deck` };
+  }
+
+  const card = await getAiProvider().generateFlashcard({ word: w });
+  const { error } = await supabase.from("flashcards").insert({
+    user_id: userId,
+    word: card.word,
+    pos: card.pos,
+    level: card.level,
+    context: card.context,
+    def: card.def,
+    example: card.example,
+    synonyms: card.synonyms,
+    phonetic: card.phonetic,
+  });
+  if (error) return { success: false, message: "Failed to save — please try again" };
+
+  revalidatePath("/flashcards");
+  return { success: true, message: `"${card.word}" added to Flashcards!` };
+}
+
 export async function createFromWord(word: string, context?: string) {
   const w = word.trim();
   if (!w) return;
@@ -43,48 +92,7 @@ export async function createFromWord(word: string, context?: string) {
     def: card.def,
     example: card.example,
     synonyms: card.synonyms,
+    phonetic: card.phonetic,
   });
   revalidatePath("/flashcards");
-}
-
-/**
- * Generate + save flashcards for a batch of words (from the editor's "Learn"
- * queue), skipping words already in the user's deck. Returns the count added.
- */
-export async function importQueue(words: string[]): Promise<number> {
-  const { supabase, user } = await requireUser();
-  const ai = getAiProvider();
-
-  const { data: existing } = await supabase
-    .from("flashcards")
-    .select("word")
-    .eq("user_id", user.id);
-  const have = new Set((existing ?? []).map((r: { word: string }) => r.word.toLowerCase()));
-
-  let added = 0;
-  for (const raw of words) {
-    const w = raw.trim();
-    if (!w || have.has(w.toLowerCase())) continue;
-    try {
-      const card = await ai.generateFlashcard({ word: w });
-      const { error } = await supabase.from("flashcards").insert({
-        user_id: user.id,
-        word: card.word,
-        pos: card.pos,
-        level: card.level,
-        context: card.context,
-        def: card.def,
-        example: card.example,
-        synonyms: card.synonyms,
-      });
-      if (!error) {
-        have.add(w.toLowerCase());
-        added++;
-      }
-    } catch {
-      // skip words the model can't process
-    }
-  }
-  revalidatePath("/flashcards");
-  return added;
 }

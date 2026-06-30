@@ -1,6 +1,4 @@
 "use client";
-// components/screens/FlashcardsScreen.tsx — ported from prototype screen-flashcards.jsx,
-// wired to Supabase flashcards + the editor "Learn" import queue.
 
 import React from "react";
 import { useRouter } from "next/navigation";
@@ -25,6 +23,7 @@ export type Flashcard = {
   example: string | null;
   synonyms: string[];
   learned: boolean;
+  phonetic: string | null;
 };
 
 const levelColor: Record<string, "green" | "amber" | "purple"> = {
@@ -54,8 +53,23 @@ function FlashCardView({
   isFlipped: boolean;
   onFlip: () => void;
 }) {
+  const [speaking, setSpeaking] = React.useState(false);
+
+  function handleSpeak(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance(card.word);
+    utt.lang = "en-US";
+    utt.rate = 0.85;
+    utt.onstart = () => setSpeaking(true);
+    utt.onend = () => setSpeaking(false);
+    utt.onerror = () => setSpeaking(false);
+    window.speechSynthesis.speak(utt);
+  }
+
   return (
-    <div className="flip-scene" style={{ width: "100%", height: 340 }} onClick={onFlip}>
+    <div className="flip-scene" style={{ width: "100%", height: 360 }} onClick={onFlip}>
       <div className={`flip-inner${isFlipped ? " flipped" : ""}`}>
         {/* Front */}
         <div
@@ -68,26 +82,58 @@ function FlashCardView({
             alignItems: "center",
             justifyContent: "center",
             padding: "32px 40px",
-            gap: 16,
+            gap: 12,
             cursor: "pointer",
             boxShadow: "var(--sh2)",
           }}
         >
-          <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+          <div style={{ display: "flex", gap: 8 }}>
             <Badge color={levelColor[card.level] || "gray"}>{card.level}</Badge>
             {card.context && (
               <Badge color={ctxColor[card.context] || "gray"}>{card.context}</Badge>
             )}
           </div>
-          <p style={{ fontSize: 42, fontWeight: 800, color: "var(--t1)", letterSpacing: "-1.5px", textAlign: "center" }}>
+
+          <p style={{ fontSize: 44, fontWeight: 800, color: "var(--t1)", letterSpacing: "-1.5px", textAlign: "center", lineHeight: 1.1 }}>
             {card.word}
           </p>
-          {card.pos && <p style={{ fontSize: 14, color: "var(--t3)", fontStyle: "italic" }}>{card.pos}</p>}
-          <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 6, color: "var(--t4)", fontSize: 12 }}>
+
+          {/* Phonetic + TTS row */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {card.phonetic && (
+              <span style={{ fontSize: 15, color: "var(--t3)", fontFamily: "serif", letterSpacing: ".5px" }}>
+                {card.phonetic}
+              </span>
+            )}
+            <button
+              onClick={handleSpeak}
+              title="Listen to pronunciation"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 30,
+                height: 30,
+                borderRadius: "50%",
+                border: "1.5px solid var(--bord2)",
+                background: speaking ? "var(--amber-ll)" : "var(--surf2)",
+                cursor: "pointer",
+                transition: "all var(--fast)",
+                color: speaking ? "var(--amber-d)" : "var(--t3)",
+              }}
+            >
+              <Icon name="volume" size={14} color={speaking ? "var(--amber-d)" : "var(--t3)"} />
+            </button>
+          </div>
+
+          {card.pos && <p style={{ fontSize: 13, color: "var(--t4)", fontStyle: "italic" }}>{card.pos}</p>}
+
+          <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 6, color: "var(--t4)", fontSize: 12 }}>
             <Icon name="rotate" size={13} />
             Click to reveal definition
           </div>
         </div>
+
         {/* Back */}
         <div
           className="flip-b"
@@ -130,9 +176,7 @@ function FlashCardView({
               </p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {card.synonyms.map((s) => (
-                  <Badge key={s} color="gray">
-                    {s}
-                  </Badge>
+                  <Badge key={s} color="gray">{s}</Badge>
                 ))}
               </div>
             </div>
@@ -146,11 +190,9 @@ function FlashCardView({
 export function FlashcardsScreen({
   cards,
   toggleLearned,
-  importQueue,
 }: {
   cards: Flashcard[];
   toggleLearned: (id: string, learned: boolean) => Promise<void>;
-  importQueue: (words: string[]) => Promise<number>;
 }) {
   const router = useRouter();
   const [idx, setIdx] = React.useState(0);
@@ -160,18 +202,7 @@ export function FlashcardsScreen({
   const [done, setDone] = React.useState(false);
   const [known, setKnown] = React.useState<Set<string>>(new Set());
   const [studying, setStudying] = React.useState<Set<string>>(new Set());
-  const [queue, setQueue] = React.useState<string[]>([]);
-  const [importing, setImporting] = React.useState(false);
   const [, startTransition] = React.useTransition();
-
-  React.useEffect(() => {
-    try {
-      const q: string[] = JSON.parse(localStorage.getItem("flashcardQueue") || "[]");
-      setQueue(q);
-    } catch {
-      setQueue([]);
-    }
-  }, []);
 
   const knownCount = cards.filter((c) => c.learned).length;
 
@@ -183,16 +214,21 @@ export function FlashcardsScreen({
 
   const card = filtered[idx];
 
-  React.useEffect(() => {
+  function resetSession() {
     setIdx(0);
     setFlipped(false);
     setDone(false);
     setKnown(new Set());
     setStudying(new Set());
-  }, [filter, search]);
+  }
 
   function persistLearned(id: string, learned: boolean) {
     startTransition(() => toggleLearned(id, learned));
+  }
+
+  function navigate(dir: 1 | -1) {
+    setFlipped(false);
+    setTimeout(() => setIdx((i) => Math.max(0, Math.min(filtered.length - 1, i + dir))), 150);
   }
 
   function goNext(action: "know" | "study") {
@@ -200,18 +236,10 @@ export function FlashcardsScreen({
       const id = card.id;
       if (action === "know") {
         setKnown((p) => new Set([...p, id]));
-        setStudying((p) => {
-          const next = new Set(p);
-          next.delete(id);
-          return next;
-        });
+        setStudying((p) => { const n = new Set(p); n.delete(id); return n; });
       } else {
         setStudying((p) => new Set([...p, id]));
-        setKnown((p) => {
-          const next = new Set(p);
-          next.delete(id);
-          return next;
-        });
+        setKnown((p) => { const n = new Set(p); n.delete(id); return n; });
       }
       persistLearned(id, action === "know");
     }
@@ -229,18 +257,6 @@ export function FlashcardsScreen({
     setKnown(new Set());
     setStudying(new Set());
     router.refresh();
-  }
-
-  async function handleImport() {
-    setImporting(true);
-    try {
-      await importQueue(queue);
-      localStorage.removeItem("flashcardQueue");
-      setQueue([]);
-      router.refresh();
-    } finally {
-      setImporting(false);
-    }
   }
 
   const reviewingCount = filtered.length - filtered.filter((c) => c.learned).length;
@@ -288,33 +304,6 @@ export function FlashcardsScreen({
           </div>
         </div>
 
-        {/* Import banner */}
-        {queue.length > 0 && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-              padding: "12px 16px",
-              marginBottom: 16,
-              background: "var(--amber-ll)",
-              border: "1px solid var(--amber-l)",
-              borderRadius: "var(--r3)",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <Icon name="sparkles" size={16} color="var(--amber-d)" />
-              <span style={{ fontSize: 13, color: "var(--amber-dd)", fontWeight: 600 }}>
-                {queue.length} word{queue.length !== 1 ? "s" : ""} from the editor ready to import
-              </span>
-            </div>
-            <Button variant="soft" size="sm" icon="download" loading={importing} onClick={handleImport}>
-              Import &amp; generate
-            </Button>
-          </div>
-        )}
-
         {/* Controls */}
         {cards.length > 0 && (
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 20 }}>
@@ -322,7 +311,7 @@ export function FlashcardsScreen({
               <Icon name="search" size={14} color="var(--t4)" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)" }} />
               <input
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => { setSearch(e.target.value); resetSession(); }}
                 placeholder="Search words…"
                 style={{
                   paddingLeft: 32,
@@ -340,7 +329,7 @@ export function FlashcardsScreen({
                 }}
               />
             </div>
-            <Segmented value={filter} onChange={setFilter} options={LEVEL_FILTERS} size="sm" />
+            <Segmented value={filter} onChange={(v) => { setFilter(v); resetSession(); }} options={LEVEL_FILTERS} size="sm" />
           </div>
         )}
 
@@ -348,9 +337,7 @@ export function FlashcardsScreen({
         {cards.length > 0 && !done && filtered.length > 0 && (
           <div style={{ marginBottom: 8 }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--t3)", marginBottom: 6 }}>
-              <span>
-                Card {Math.min(idx + 1, filtered.length)} of {filtered.length}
-              </span>
+              <span>Card {Math.min(idx + 1, filtered.length)} of {filtered.length}</span>
               <span>{Math.round((idx / filtered.length) * 100)}% complete</span>
             </div>
             <ProgressBar value={idx} max={filtered.length} />
@@ -364,7 +351,7 @@ export function FlashcardsScreen({
           <EmptyState
             icon="book"
             title="No flashcards yet"
-            subtitle="Use the editor's 'Learn' button to collect words, then import them here."
+            subtitle="Add words from the Editor — click '+ Add' next to any vocabulary suggestion."
           />
         ) : filtered.length === 0 ? (
           <EmptyState icon="search" title="No cards found" subtitle="Try a different search term or filter." />
@@ -409,14 +396,11 @@ export function FlashcardsScreen({
             {card && <FlashCardView card={card} isFlipped={flipped} onFlip={() => setFlipped((f) => !f)} />}
 
             {/* Navigation dots */}
-            <div style={{ display: "flex", justifyContent: "center", gap: 6, margin: "20px 0" }}>
+            <div style={{ display: "flex", justifyContent: "center", gap: 6, margin: "16px 0 12px" }}>
               {filtered.map((c, i) => (
                 <div
                   key={c.id}
-                  onClick={() => {
-                    setIdx(i);
-                    setFlipped(false);
-                  }}
+                  onClick={() => { setIdx(i); setFlipped(false); }}
                   style={{
                     width: i === idx ? 20 : 7,
                     height: 7,
@@ -429,17 +413,56 @@ export function FlashcardsScreen({
               ))}
             </div>
 
-            {/* Action buttons */}
-            <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-              <Button variant="secondary" size="md" icon="thu-d" onClick={() => goNext("study")} style={{ minWidth: 140, color: "var(--t2)" }}>
-                Study Again
+            {/* Prev / Next navigation */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+              <Button
+                variant="secondary"
+                size="md"
+                icon="arr-l"
+                onClick={() => navigate(-1)}
+                disabled={idx === 0}
+                style={{ minWidth: 110 }}
+              >
+                Previous
               </Button>
-              <Button variant="primary" size="md" icon="thu-u" onClick={() => goNext("know")} style={{ minWidth: 140 }}>
-                I Know This
+              <span style={{ fontSize: 12, color: "var(--t3)", fontWeight: 500 }}>
+                {idx + 1} / {filtered.length}
+              </span>
+              <Button
+                variant="secondary"
+                size="md"
+                iconRight="arr-r"
+                onClick={() => navigate(1)}
+                disabled={idx >= filtered.length - 1}
+                style={{ minWidth: 110 }}
+              >
+                Next
               </Button>
             </div>
 
-            <p style={{ textAlign: "center", fontSize: 12, color: "var(--t4)", marginTop: 16 }}>
+            {/* Study action buttons */}
+            <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+              <Button
+                variant="secondary"
+                size="lg"
+                icon="thu-d"
+                onClick={() => goNext("study")}
+                style={{ flex: 1, maxWidth: 220, color: "var(--t2)" }}
+              >
+                Study Again
+              </Button>
+              <Button
+                variant="primary"
+                size="lg"
+                icon="thu-u"
+                onClick={() => goNext("know")}
+                style={{ flex: 1, maxWidth: 220 }}
+              >
+                I Know This ✓
+              </Button>
+            </div>
+
+            <p style={{ textAlign: "center", fontSize: 12, color: "var(--t4)", marginTop: 14 }}>
               Click the card to flip · {reviewingCount} still to learn
             </p>
           </div>

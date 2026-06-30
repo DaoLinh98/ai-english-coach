@@ -3,14 +3,15 @@ import { GoogleGenAI } from "@google/genai";
 const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
 function buildTranslationPrompt(text: string): string {
-  return `You are an expert English editor and translator working with software developers and office professionals.
+  return `You are an expert English editor working with software developers.
 
 The user has written text that may be a mix of Vietnamese and English. Your tasks:
-1. Translate any Vietnamese portions into natural, professional English
-2. Fix all grammar, spelling, punctuation, and sentence structure issues
-3. Ensure the result reads as fluent, cohesive English
+1. Translate any Vietnamese portions into English
+2. Fix all grammar, spelling, punctuation, and sentence structure
+3. Use concise, tech-oriented professional English — direct, on-point, no filler words
+4. Preserve technical terms (API, PR, deploy, refactor, etc.) exactly as written
 
-Return ONLY the corrected English text. No explanation, no commentary, no JSON wrapper — just the final text.
+Return ONLY the corrected English text. No explanation, no commentary — just the final text.
 
 TEXT:
 """
@@ -40,7 +41,10 @@ export async function POST(req: Request) {
         const genStream = await ai.models.generateContentStream({
           model: MODEL,
           contents: buildTranslationPrompt(text),
-          config: { temperature: 0.1 },
+          config: {
+            temperature: 0.1,
+            thinkingConfig: { thinkingBudget: 0 },
+          },
         });
 
         for await (const chunk of genStream) {
