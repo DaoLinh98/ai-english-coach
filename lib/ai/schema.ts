@@ -48,8 +48,8 @@ export const generatedFlashcardSchema = z.object({
   def: z.string(),
   example: z.string(),
   synonyms: z.array(z.string()),
-  /** IPA phonetic transcription, e.g. /dɪˈplɔɪmənt/ */
-  phonetic: z.string(),
+  /** IPA phonetic transcription, e.g. /dɪˈplɔɪmənt/ — empty string when unavailable */
+  phonetic: z.string().default(""),
 });
 export type GeneratedFlashcard = z.infer<typeof generatedFlashcardSchema>;
 

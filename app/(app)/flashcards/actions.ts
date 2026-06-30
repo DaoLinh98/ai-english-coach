@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getAiProvider } from "@/lib/ai";
+import type { GeneratedFlashcard } from "@/lib/ai/schema";
 import { createClient } from "@/lib/supabase/server";
 
 async function requireUser() {
@@ -60,7 +61,13 @@ export async function addFlashcardDirect(
     return { success: false, message: `"${w}" is already in your deck` };
   }
 
-  const card = await getAiProvider().generateFlashcard({ word: w });
+  let card: GeneratedFlashcard;
+  try {
+    card = await getAiProvider().generateFlashcard({ word: w });
+  } catch {
+    return { success: false, message: "AI generation failed — please try again" };
+  }
+
   const { error } = await supabase.from("flashcards").insert({
     user_id: userId,
     word: card.word,
@@ -70,7 +77,7 @@ export async function addFlashcardDirect(
     def: card.def,
     example: card.example,
     synonyms: card.synonyms,
-    phonetic: card.phonetic,
+    phonetic: card.phonetic || null,
   });
   if (error) return { success: false, message: "Failed to save — please try again" };
 
