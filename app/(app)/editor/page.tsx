@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Button, EmptyState, Icon, Spinner } from "@/components/ui";
+import { addFlashcardDirect } from "@/app/(app)/flashcards/actions";
 
 const STOP_WORDS = new Set([
   "the","and","that","have","this","with","from","they","will","been","their",
@@ -28,8 +29,23 @@ interface EditorState {
 const SESSION_KEY = "editorState";
 
 function extractVocab(text: string): string[] {
-  const words = text.toLowerCase().match(/\b[a-z]{7,}\b/g) ?? [];
-  return [...new Set(words)].filter((w) => !STOP_WORDS.has(w)).slice(0, 14);
+  const tokens = text.toLowerCase().match(/\b[a-z]+\b/g) ?? [];
+
+  // Bigrams: both words 4+ chars, neither a stop word
+  const bigrams: string[] = [];
+  for (let i = 0; i < tokens.length - 1; i++) {
+    const a = tokens[i], b = tokens[i + 1];
+    if (a.length >= 4 && b.length >= 4 && !STOP_WORDS.has(a) && !STOP_WORDS.has(b)) {
+      bigrams.push(`${a} ${b}`);
+    }
+  }
+  const uniqBigrams = [...new Set(bigrams)].slice(0, 8);
+
+  // Single words: 6+ chars, not a stop word, not already covered by a bigram
+  const bigWordSet = new Set(uniqBigrams.flatMap((b) => b.split(" ")));
+  const singles = [...new Set(tokens.filter((w) => w.length >= 6 && !STOP_WORDS.has(w) && !bigWordSet.has(w)))];
+
+  return [...uniqBigrams, ...singles].slice(0, 12);
 }
 
 function loadSession(): Partial<EditorState> {
@@ -46,14 +62,6 @@ function saveSession(state: EditorState) {
   } catch {}
 }
 
-function queueFlashcard(word: string) {
-  try {
-    const key = "flashcardQueue";
-    const cur: string[] = JSON.parse(localStorage.getItem(key) || "[]");
-    if (!cur.includes(word)) cur.push(word);
-    localStorage.setItem(key, JSON.stringify(cur));
-  } catch {}
-}
 
 export default function EditorPage() {
   const [inputText, setInputText] = React.useState<string>(() => {
@@ -74,6 +82,7 @@ export default function EditorPage() {
     return saved.translatedText ? extractVocab(saved.translatedText) : [];
   });
   const [addedWords, setAddedWords] = React.useState<Set<string>>(new Set());
+  const [addingWords, setAddingWords] = React.useState<Set<string>>(new Set());
   const [toast, setToast] = React.useState<string | null>(null);
   const [narrow, setNarrow] = React.useState(false);
   const [copyDone, setCopyDone] = React.useState(false);
@@ -150,10 +159,23 @@ export default function EditorPage() {
     setTimeout(() => setCopyDone(false), 1500);
   }
 
-  function handleAddFlashcard(word: string) {
-    queueFlashcard(word);
-    setAddedWords((prev) => new Set([...prev, word]));
-    showToast(`"${word}" added to Flashcards!`);
+  async function handleAddFlashcard(phrase: string) {
+    setAddingWords((prev) => new Set([...prev, phrase]));
+    try {
+      const result = await addFlashcardDirect(phrase);
+      if (result.success) {
+        setAddedWords((prev) => new Set([...prev, phrase]));
+      }
+      showToast(result.message);
+    } catch {
+      showToast("Failed to add — please try again.");
+    } finally {
+      setAddingWords((prev) => {
+        const next = new Set(prev);
+        next.delete(phrase);
+        return next;
+      });
+    }
   }
 
   const wordCount = inputText.trim().split(/\s+/).filter(Boolean).length;
@@ -317,11 +339,12 @@ export default function EditorPage() {
                 subtitle="No notable vocabulary suggestions for this text."
               />
             )}
-            {mode === "result" && vocabSuggestions.map((word) => {
-              const added = addedWords.has(word);
+            {mode === "result" && vocabSuggestions.map((phrase) => {
+              const added = addedWords.has(phrase);
+              const adding = addingWords.has(phrase);
               return (
                 <div
-                  key={word}
+                  key={phrase}
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -333,14 +356,14 @@ export default function EditorPage() {
                     transition: "all var(--fast)",
                   }}
                 >
-                  <span style={{ fontSize: 14, fontWeight: 600, color: added ? "var(--green)" : "var(--t1)", fontFamily: "var(--font)" }}>
-                    {word}
+                  <span style={{ fontSize: 13, fontWeight: 600, color: added ? "var(--green)" : "var(--t1)", fontFamily: "var(--font)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {phrase}
                   </span>
                   {added ? (
                     <Icon name="check" size={15} color="var(--green)" />
                   ) : (
-                    <Button size="xs" variant="soft" onClick={() => handleAddFlashcard(word)}>
-                      + Add
+                    <Button size="xs" variant="soft" loading={adding} onClick={() => handleAddFlashcard(phrase)}>
+                      {adding ? "" : "+ Add"}
                     </Button>
                   )}
                 </div>

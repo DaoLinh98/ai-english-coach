@@ -5,7 +5,7 @@ import {
   FlashcardsScreen,
   type Flashcard,
 } from "@/components/screens/FlashcardsScreen";
-import { toggleLearned, importQueue } from "./actions";
+import { toggleLearned } from "./actions";
 
 export default async function FlashcardsPage() {
   const session = await getSessionUser();
@@ -28,7 +28,6 @@ export default async function FlashcardsPage() {
     <FlashcardsScreen
       cards={cards}
       toggleLearned={toggleLearned}
-      importQueue={importQueue}
     />
   );
 }

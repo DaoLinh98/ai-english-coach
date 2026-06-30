@@ -88,7 +88,8 @@ Return ONLY a JSON object (no markdown) with this exact shape:
   "context": string,     // one topical tag: "Technical", "Business", "Writing", or "General"
   "def": string,         // a clear, concise definition
   "example": string,     // one natural example sentence for a tech/office professional
-  "synonyms": string[]   // 3-4 synonyms or close alternatives
+  "synonyms": string[],  // 3-4 synonyms or close alternatives
+  "phonetic": string     // IPA transcription, e.g. /dɪˈplɔɪmənt/ — include the slashes
 }`;
 }
 
