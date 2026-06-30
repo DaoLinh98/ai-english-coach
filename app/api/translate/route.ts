@@ -20,50 +20,55 @@ ${text}
 }
 
 export async function POST(req: Request) {
-  const body = await req.json() as { text?: string };
-  const text = body.text?.trim();
+  try {
+    const body = (await req.json()) as { text?: string };
+    const text = body.text?.trim();
 
-  if (!text) {
-    return new Response("Missing text", { status: 400 });
-  }
+    if (!text) {
+      return new Response("Missing text", { status: 400 });
+    }
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return new Response("API not configured", { status: 500 });
-  }
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return new Response("API key not configured", { status: 500 });
+    }
 
-  const ai = new GoogleGenAI({ apiKey });
-  const encoder = new TextEncoder();
+    const ai = new GoogleGenAI({ apiKey });
+    const encoder = new TextEncoder();
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      try {
-        const genStream = await ai.models.generateContentStream({
-          model: MODEL,
-          contents: buildTranslationPrompt(text),
-          config: {
-            temperature: 0.1,
-            thinkingConfig: { thinkingBudget: 0 },
-          },
-        });
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          const genStream = await ai.models.generateContentStream({
+            model: MODEL,
+            contents: buildTranslationPrompt(text),
+            config: {
+              temperature: 0.1,
+              thinkingConfig: { thinkingBudget: 0 },
+            },
+          });
 
-        for await (const chunk of genStream) {
-          const part = chunk.text;
-          if (part) {
-            controller.enqueue(encoder.encode(part));
+          for await (const chunk of genStream) {
+            const part = chunk.text;
+            if (part) {
+              controller.enqueue(encoder.encode(part));
+            }
           }
+          controller.close();
+        } catch (err) {
+          controller.error(err);
         }
-        controller.close();
-      } catch (err) {
-        controller.error(err);
-      }
-    },
-  });
+      },
+    });
 
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "X-Content-Type-Options": "nosniff",
-    },
-  });
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Internal error";
+    return new Response(msg, { status: 500 });
+  }
 }
