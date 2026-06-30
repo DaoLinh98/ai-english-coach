@@ -10,7 +10,7 @@ import { Icon, Avatar, Button, type IconName } from "@/components/ui";
 const NAV: { id: string; icon: IconName; label: string }[] = [
   { id: "dashboard", icon: "home", label: "Dashboard" },
   { id: "editor", icon: "pen", label: "Editor" },
-  { id: "batch", icon: "layers", label: "Batch" },
+  { id: "batch", icon: "layers", label: "Translate" },
   { id: "flashcards", icon: "book", label: "Flashcards" },
   { id: "quiz", icon: "trophy", label: "Quiz & Progress" },
   { id: "settings", icon: "settings", label: "Settings" },
