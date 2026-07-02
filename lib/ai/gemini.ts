@@ -16,7 +16,7 @@ import type {
   SuggestContinuationInput,
 } from "./provider";
 
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
 
 const CONTEXT_GUIDE: Record<CorrectContext, string> = {
   email: "a professional or semi-formal work email",

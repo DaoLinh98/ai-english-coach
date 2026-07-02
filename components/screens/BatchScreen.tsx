@@ -85,7 +85,7 @@ export function BatchScreen() {
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       translate();
     }
@@ -155,16 +155,6 @@ export function BatchScreen() {
               Clear
             </Button>
           )}
-          <Button
-            variant="primary"
-            size="sm"
-            icon="arr-r"
-            loading={loading}
-            disabled={!input.trim()}
-            onClick={translate}
-          >
-            Translate
-          </Button>
         </div>
       </div>
 
@@ -184,7 +174,7 @@ export function BatchScreen() {
             <span style={{ fontSize: 12, fontWeight: 600, color: "var(--t3)", letterSpacing: ".04em", textTransform: "uppercase" }}>
               English
             </span>
-            <span style={{ fontSize: 11, color: "var(--t4)" }}>Ctrl+Enter to translate</span>
+            <span style={{ fontSize: 11, color: "var(--t4)" }}>Press Enter to translate</span>
           </div>
           <textarea
             value={input}

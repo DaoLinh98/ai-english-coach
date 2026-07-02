@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
 
 const SOURCE_GUIDE: Record<string, string> = {
   message: "a direct message or chat message from a client or colleague",
