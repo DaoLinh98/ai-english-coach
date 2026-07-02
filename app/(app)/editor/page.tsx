@@ -235,6 +235,12 @@ export default function EditorPage() {
                 }}
                 onFocus={(e) => (e.target.style.borderColor = "var(--amber)")}
                 onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    if (inputText.trim() && mode !== "loading") handleTranslate();
+                  }
+                }}
               />
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <Button
