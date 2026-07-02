@@ -86,6 +86,7 @@ export default function EditorPage() {
   const [toast, setToast] = React.useState<string | null>(null);
   const [narrow, setNarrow] = React.useState(false);
   const [copyDone, setCopyDone] = React.useState(false);
+  const [speaking, setSpeaking] = React.useState(false);
 
   React.useEffect(() => {
     const h = () => setNarrow(window.innerWidth < 960);
@@ -159,6 +160,18 @@ export default function EditorPage() {
     setTimeout(() => setCopyDone(false), 1500);
   }
 
+  function handleSpeak() {
+    if (!translatedText || typeof window === "undefined" || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance(translatedText);
+    utt.lang = "en-US";
+    utt.rate = 0.9;
+    utt.onstart = () => setSpeaking(true);
+    utt.onend = () => setSpeaking(false);
+    utt.onerror = () => setSpeaking(false);
+    window.speechSynthesis.speak(utt);
+  }
+
   async function handleAddFlashcard(phrase: string) {
     setAddingWords((prev) => new Set([...prev, phrase]));
     try {
@@ -195,6 +208,9 @@ export default function EditorPage() {
         </div>
         {mode === "result" && (
           <div style={{ display: "flex", gap: 8 }}>
+            <Button variant="ghost" size="sm" icon="volume" onClick={handleSpeak} style={speaking ? { color: "var(--amber-d)" } : {}}>
+              Listen
+            </Button>
             <Button variant="secondary" size="sm" icon={copyDone ? "check" : "copy"} onClick={handleCopy} style={copyDone ? { color: "var(--green)" } : {}}>
               {copyDone ? "Copied!" : "Copy"}
             </Button>
