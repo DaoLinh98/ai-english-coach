@@ -110,6 +110,8 @@ export async function addFlashcardDirect(
     example: card.example,
     synonyms: card.synonyms,
     phonetic: card.phonetic || null,
+    // No explicit tag at creation time — default to part-of-speech.
+    tag: card.pos || null,
   });
   if (error) return { success: false, message: "Failed to save — please try again" };
 
@@ -117,7 +119,7 @@ export async function addFlashcardDirect(
   return { success: true, message: `"${card.word}" added to Flashcards!` };
 }
 
-export async function createFromWord(word: string, context?: string) {
+export async function createFromWord(word: string, context?: string, tag?: string) {
   const w = word.trim();
   if (!w) return;
   const { supabase, user } = await requireUser();
@@ -132,6 +134,24 @@ export async function createFromWord(word: string, context?: string) {
     example: card.example,
     synonyms: card.synonyms,
     phonetic: card.phonetic,
+    // Use the explicit tag when provided, otherwise default to part-of-speech.
+    tag: tag?.trim() || card.pos || null,
   });
+  revalidatePath("/flashcards");
+}
+
+/**
+ * Update a flashcard's tag/category. Used by the Flashcards screen's tag
+ * filter UI to let users (re)assign a tag, including clearing it back to
+ * "Uncategorized" by passing an empty string.
+ */
+export async function updateFlashcardTag(id: string, tag: string) {
+  const { supabase, user } = await requireUser();
+  const trimmed = tag.trim();
+  await supabase
+    .from("flashcards")
+    .update({ tag: trimmed || null, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("user_id", user.id);
   revalidatePath("/flashcards");
 }

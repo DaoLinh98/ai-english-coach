@@ -20,6 +20,7 @@ export type Flashcard = {
   pos: string | null;
   level: string;
   context: string | null;
+  tag: string | null;
   def: string;
   example: string | null;
   synonyms: string[];
@@ -30,6 +31,8 @@ export type Flashcard = {
   created_at: string;
   updated_at: string;
 };
+
+const UNCATEGORIZED = "__uncategorized__";
 
 const GRADE_BUTTONS: { grade: SrsGrade; label: string; icon: string; variant: "secondary" | "primary" }[] = [
   { grade: "again", label: "Again", icon: "x", variant: "secondary" },
@@ -202,10 +205,12 @@ function FlashCardView({
   card,
   isFlipped,
   onFlip,
+  onEditTag,
 }: {
   card: Flashcard;
   isFlipped: boolean;
   onFlip: () => void;
+  onEditTag?: (card: Flashcard) => void;
 }) {
   const [speaking, setSpeaking] = React.useState(false);
 
@@ -241,10 +246,30 @@ function FlashCardView({
             boxShadow: "var(--sh2)",
           }}
         >
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <Badge color={levelColor[card.level] || "gray"}>{card.level}</Badge>
             {card.context && (
               <Badge color={ctxColor[card.context] || "gray"}>{card.context}</Badge>
+            )}
+            <Badge color="gray">{card.tag || "Uncategorized"}</Badge>
+            {onEditTag && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onEditTag(card); }}
+                title="Edit tag"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 20,
+                  height: 20,
+                  borderRadius: "50%",
+                  border: "1px solid var(--bord2)",
+                  background: "var(--surf2)",
+                  cursor: "pointer",
+                }}
+              >
+                <Icon name="pen" size={10} color="var(--t3)" />
+              </button>
             )}
           </div>
 
@@ -349,11 +374,13 @@ const DUE_FILTERS: SegOption[] = [
 export function FlashcardsScreen({
   cards,
   reviewFlashcard,
+  updateFlashcardTag,
   streak = 0,
   studiedToday = false,
 }: {
   cards: Flashcard[];
   reviewFlashcard: (id: string, grade: SrsGrade) => Promise<void>;
+  updateFlashcardTag?: (id: string, tag: string) => Promise<void>;
   streak?: number;
   studiedToday?: boolean;
 }) {
@@ -361,6 +388,7 @@ export function FlashcardsScreen({
   const [idx, setIdx] = React.useState(0);
   const [flipped, setFlipped] = React.useState(false);
   const [filter, setFilter] = React.useState("all");
+  const [tagFilter, setTagFilter] = React.useState("all");
   const [dueFilter, setDueFilter] = React.useState("due");
   const [search, setSearch] = React.useState("");
   const [done, setDone] = React.useState(false);
@@ -375,11 +403,24 @@ export function FlashcardsScreen({
   const knownCount = cards.filter((c) => c.learned).length;
   const dueCount = cards.filter((c) => isDue(c.dueDate)).length;
 
+  const tagOptions: SegOption[] = React.useMemo(() => {
+    const tags = Array.from(new Set(cards.map((c) => c.tag).filter((t): t is string => !!t))).sort();
+    const hasUncategorized = cards.some((c) => !c.tag);
+    return [
+      { value: "all", label: "All" },
+      ...tags.map((t) => ({ value: t, label: t })),
+      ...(hasUncategorized ? [{ value: UNCATEGORIZED, label: "Uncategorized" }] : []),
+    ];
+  }, [cards]);
+
   const filtered = cards.filter((c) => {
     const matchLevel = filter === "all" || c.level === filter;
+    const matchTag =
+      tagFilter === "all" ||
+      (tagFilter === UNCATEGORIZED ? !c.tag : c.tag === tagFilter);
     const matchSearch = !search || c.word.toLowerCase().includes(search.toLowerCase());
     const matchDue = dueFilter === "all" || isDue(c.dueDate);
-    return matchLevel && matchSearch && matchDue;
+    return matchLevel && matchTag && matchSearch && matchDue;
   });
 
   const card = filtered[idx];
@@ -397,6 +438,13 @@ export function FlashcardsScreen({
 
   function persistReview(id: string, grade: SrsGrade) {
     startTransition(() => reviewFlashcard(id, grade));
+  }
+
+  function handleEditTag(c: Flashcard) {
+    if (!updateFlashcardTag || typeof window === "undefined") return;
+    const next = window.prompt("Set tag/category (leave blank for Uncategorized):", c.tag ?? "");
+    if (next === null) return;
+    startTransition(() => updateFlashcardTag(c.id, next));
   }
 
   function navigate(dir: 1 | -1) {
@@ -544,6 +592,9 @@ export function FlashcardsScreen({
               />
             </div>
             <Segmented value={filter} onChange={(v) => { setFilter(v); resetSession(); }} options={LEVEL_FILTERS} size="sm" />
+            {tagOptions.length > 1 && (
+              <Segmented value={tagFilter} onChange={(v) => { setTagFilter(v); resetSession(); }} options={tagOptions} size="sm" />
+            )}
             <Segmented value={dueFilter} onChange={(v) => { setDueFilter(v); resetSession(); }} options={DUE_FILTERS} size="sm" />
             <Segmented
               value={studyMode}
@@ -617,7 +668,12 @@ export function FlashcardsScreen({
         ) : (
           <div style={{ maxWidth: 560, margin: "0 auto", paddingTop: 8 }}>
             {card && studyMode === "flip" && (
-              <FlashCardView card={card} isFlipped={flipped} onFlip={() => setFlipped((f) => !f)} />
+              <FlashCardView
+                card={card}
+                isFlipped={flipped}
+                onFlip={() => setFlipped((f) => !f)}
+                onEditTag={updateFlashcardTag ? handleEditTag : undefined}
+              />
             )}
             {card && studyMode === "type" && (
               <TypingCardView

@@ -6,7 +6,7 @@ import {
   FlashcardsScreen,
   type Flashcard,
 } from "@/components/screens/FlashcardsScreen";
-import { reviewFlashcard } from "./actions";
+import { reviewFlashcard, updateFlashcardTag } from "./actions";
 
 export default async function FlashcardsPage() {
   const session = await getSessionUser();
@@ -26,6 +26,7 @@ export default async function FlashcardsPage() {
       ...c,
       dueDate: (c.due_date as string) ?? new Date().toLocaleDateString("en-CA"),
       reviewCount: (c.review_count as number) ?? 0,
+      tag: (c.tag as string | null) ?? null,
     })) as Flashcard[];
     // A card was actually reviewed (not just created) when updated_at moved
     // past created_at — reviewFlashcard() is the only thing that bumps it.
@@ -40,6 +41,7 @@ export default async function FlashcardsPage() {
     <FlashcardsScreen
       cards={cards}
       reviewFlashcard={reviewFlashcard}
+      updateFlashcardTag={updateFlashcardTag}
       streak={computeStreak(reviewDates)}
       studiedToday={hasActivityToday(reviewDates)}
     />
