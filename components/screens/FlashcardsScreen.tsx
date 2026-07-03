@@ -109,9 +109,29 @@ function TypingCardView({
         gap: 16,
       }}
     >
-      <div style={{ display: "flex", gap: 8 }}>
-        <Badge color={levelColor[card.level] || "gray"}>{card.level}</Badge>
-        {card.context && <Badge color={ctxColor[card.context] || "gray"}>{card.context}</Badge>}
+      <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Badge color={levelColor[card.level] || "gray"}>{card.level}</Badge>
+          {card.context && <Badge color={ctxColor[card.context] || "gray"}>{card.context}</Badge>}
+        </div>
+        <button
+          onClick={handleSpeak}
+          title="Listen to pronunciation"
+          aria-label="Listen to pronunciation"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: 28,
+            height: 28,
+            borderRadius: "50%",
+            border: "1.5px solid var(--bord2)",
+            background: speaking ? "var(--amber-ll)" : "var(--surf2)",
+            cursor: "pointer",
+          }}
+        >
+          <Icon name="volume" size={13} color={speaking ? "var(--amber-d)" : "var(--t3)"} />
+        </button>
       </div>
 
       <div>
@@ -176,6 +196,7 @@ function TypingCardView({
             <button
               onClick={handleSpeak}
               title="Listen to pronunciation"
+              aria-label="Listen to pronunciation"
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -262,6 +283,7 @@ function FlashCardView({
             <button
               onClick={handleSpeak}
               title="Listen to pronunciation"
+              aria-label="Listen to pronunciation"
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -303,11 +325,31 @@ function FlashCardView({
             overflowY: "auto",
           }}
         >
-          <div style={{ display: "flex", gap: 8 }}>
-            <Badge color={levelColor[card.level] || "gray"}>{card.level}</Badge>
-            {card.context && (
-              <Badge color={ctxColor[card.context] || "gray"}>{card.context}</Badge>
-            )}
+          <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Badge color={levelColor[card.level] || "gray"}>{card.level}</Badge>
+              {card.context && (
+                <Badge color={ctxColor[card.context] || "gray"}>{card.context}</Badge>
+              )}
+            </div>
+            <button
+              onClick={handleSpeak}
+              title="Listen to pronunciation"
+              aria-label="Listen to pronunciation"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 28,
+                height: 28,
+                borderRadius: "50%",
+                border: "1.5px solid var(--bord2)",
+                background: speaking ? "var(--amber-ll)" : "var(--surf2)",
+                cursor: "pointer",
+              }}
+            >
+              <Icon name="volume" size={13} color={speaking ? "var(--amber-d)" : "var(--t3)"} />
+            </button>
           </div>
           <div>
             <p style={{ fontSize: 11, fontWeight: 700, color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".6px", marginBottom: 6 }}>
