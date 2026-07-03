@@ -481,12 +481,17 @@ export function Card({
 export function Toggle({
   value,
   onChange,
+  "aria-label": ariaLabel,
 }: {
   value: boolean;
   onChange: (v: boolean) => void;
+  "aria-label"?: string;
 }) {
   return (
     <div
+      role="switch"
+      aria-checked={value}
+      aria-label={ariaLabel}
       onClick={() => onChange(!value)}
       style={{
         width: 42,
