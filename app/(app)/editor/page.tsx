@@ -3,6 +3,7 @@
 import React from "react";
 import { Button, EmptyState, Icon, Spinner } from "@/components/ui";
 import { addFlashcardDirect } from "@/app/(app)/flashcards/actions";
+import type { ChangeExplanation } from "@/lib/ai/schema";
 
 const STOP_WORDS = new Set([
   "the","and","that","have","this","with","from","they","will","been","their",
@@ -87,6 +88,9 @@ export default function EditorPage() {
   const [narrow, setNarrow] = React.useState(false);
   const [copyDone, setCopyDone] = React.useState(false);
   const [speaking, setSpeaking] = React.useState(false);
+  const [explanations, setExplanations] = React.useState<ChangeExplanation[]>([]);
+  const [explanationsLoading, setExplanationsLoading] = React.useState(false);
+  const [expandedExplanation, setExpandedExplanation] = React.useState<number | null>(null);
 
   React.useEffect(() => {
     const h = () => setNarrow(window.innerWidth < 960);
@@ -113,6 +117,8 @@ export default function EditorPage() {
     setTranslatedText("");
     setVocabSuggestions([]);
     setAddedWords(new Set());
+    setExplanations([]);
+    setExpandedExplanation(null);
 
     try {
       const res = await fetch("/api/translate", {
@@ -140,9 +146,29 @@ export default function EditorPage() {
       }
 
       setVocabSuggestions(extractVocab(full));
+      fetchExplanations(text, full);
     } catch {
       setMode("input");
       showToast("Translation failed — please try again.");
+    }
+  }
+
+  async function fetchExplanations(original: string, corrected: string) {
+    setExplanationsLoading(true);
+    try {
+      const res = await fetch("/api/explain-changes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ original, corrected }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { items?: ChangeExplanation[] };
+        setExplanations(data.items ?? []);
+      }
+    } catch {
+      // best-effort — explanations are a nice-to-have, never block the result
+    } finally {
+      setExplanationsLoading(false);
     }
   }
 
@@ -151,6 +177,8 @@ export default function EditorPage() {
     setTranslatedText("");
     setVocabSuggestions([]);
     setAddedWords(new Set());
+    setExplanations([]);
+    setExpandedExplanation(null);
     try { sessionStorage.removeItem(SESSION_KEY); } catch {}
   }
 
@@ -314,6 +342,68 @@ export default function EditorPage() {
                   )}
                 </div>
               </div>
+
+              {/* Grammar notes: per-mistake explanations */}
+              {(explanationsLoading || explanations.length > 0) && (
+                <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "var(--t2)", textTransform: "uppercase", letterSpacing: ".4px" }}>
+                    Grammar Notes
+                  </span>
+                  {explanationsLoading && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--t3)", padding: "4px 0" }}>
+                      <Spinner size={14} color="var(--amber)" />
+                      <span style={{ fontSize: 12 }}>Analysing what changed…</span>
+                    </div>
+                  )}
+                  {explanations.map((item, i) => {
+                    const expanded = expandedExplanation === i;
+                    return (
+                      <div
+                        key={i}
+                        style={{
+                          border: "1px solid var(--bord2)",
+                          borderRadius: "var(--r3)",
+                          background: "var(--surface)",
+                          overflow: "hidden",
+                        }}
+                      >
+                        <button
+                          onClick={() => setExpandedExplanation(expanded ? null : i)}
+                          style={{
+                            width: "100%",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 10,
+                            padding: "10px 14px",
+                            background: "transparent",
+                            border: "none",
+                            cursor: "pointer",
+                            fontFamily: "var(--font)",
+                            textAlign: "left",
+                          }}
+                        >
+                          <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--t1)" }}>{item.label}</span>
+                            <span style={{ fontSize: 12, color: "var(--t3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              &quot;{item.text}&quot;
+                            </span>
+                          </span>
+                          <span style={{ display: "flex", transform: expanded ? "rotate(180deg)" : "none", transition: "transform var(--fast)" }}>
+                            <Icon name="chev-d" size={14} color="var(--t3)" />
+                          </span>
+                        </button>
+                        {expanded && (
+                          <div style={{ padding: "0 14px 12px", fontSize: 13, color: "var(--t2)", lineHeight: 1.6 }}>
+                            <p style={{ fontWeight: 600, color: "var(--amber-d)", marginBottom: 4 }}>{item.rule}</p>
+                            <p>{item.expl}</p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               <Button variant="ghost" size="sm" onClick={handleReset} style={{ alignSelf: "flex-start" }}>
                 ← Edit original

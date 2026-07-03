@@ -27,6 +27,8 @@ export type Flashcard = {
   phonetic: string | null;
   dueDate: string;
   reviewCount: number;
+  created_at: string;
+  updated_at: string;
 };
 
 const GRADE_BUTTONS: { grade: SrsGrade; label: string; icon: string; variant: "secondary" | "primary" }[] = [
@@ -53,6 +55,148 @@ const LEVEL_FILTERS: SegOption[] = [
   { value: "intermediate", label: "Intermediate" },
   { value: "advanced", label: "Advanced" },
 ];
+
+const STUDY_MODES: SegOption[] = [
+  { value: "flip", label: "Flip" },
+  { value: "type", label: "Type" },
+];
+
+function TypingCardView({
+  card,
+  checked,
+  isCorrect,
+  typedAnswer,
+  onChangeAnswer,
+  onCheck,
+}: {
+  card: Flashcard;
+  checked: boolean;
+  isCorrect: boolean;
+  typedAnswer: string;
+  onChangeAnswer: (v: string) => void;
+  onCheck: () => void;
+}) {
+  const [speaking, setSpeaking] = React.useState(false);
+
+  function handleSpeak() {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance(card.word);
+    utt.lang = "en-US";
+    utt.rate = 0.85;
+    utt.onstart = () => setSpeaking(true);
+    utt.onend = () => setSpeaking(false);
+    utt.onerror = () => setSpeaking(false);
+    window.speechSynthesis.speak(utt);
+  }
+
+  const maskedExample = card.example
+    ? card.example.replace(new RegExp(card.word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), "_____")
+    : null;
+
+  return (
+    <div
+      style={{
+        width: "100%",
+        minHeight: 360,
+        background: "var(--surface)",
+        border: "2px solid var(--bord2)",
+        borderRadius: "var(--r5)",
+        boxShadow: "var(--sh2)",
+        padding: "32px 40px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 16,
+      }}
+    >
+      <div style={{ display: "flex", gap: 8 }}>
+        <Badge color={levelColor[card.level] || "gray"}>{card.level}</Badge>
+        {card.context && <Badge color={ctxColor[card.context] || "gray"}>{card.context}</Badge>}
+      </div>
+
+      <div>
+        <p style={{ fontSize: 11, fontWeight: 700, color: "var(--t3)", textTransform: "uppercase", letterSpacing: ".6px", marginBottom: 6 }}>
+          Definition
+        </p>
+        <p style={{ fontSize: 18, fontWeight: 600, color: "var(--t1)", lineHeight: 1.5 }}>{card.def}</p>
+      </div>
+
+      {maskedExample && (
+        <div style={{ background: "rgba(245,158,11,.08)", borderRadius: "var(--r3)", padding: "12px 14px" }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: "var(--amber-d)", marginBottom: 5, textTransform: "uppercase", letterSpacing: ".5px" }}>
+            Example
+          </p>
+          <p style={{ fontSize: 13, color: "var(--t2)", fontStyle: "italic", lineHeight: 1.6 }}>&ldquo;{maskedExample}&rdquo;</p>
+        </div>
+      )}
+
+      <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
+        <input
+          value={typedAnswer}
+          onChange={(e) => onChangeAnswer(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !checked) onCheck();
+          }}
+          disabled={checked}
+          placeholder="Type the word…"
+          autoFocus
+          style={{
+            padding: "12px 14px",
+            fontSize: 16,
+            fontWeight: 600,
+            border: `1.5px solid ${checked ? (isCorrect ? "var(--green)" : "var(--red)") : "var(--border)"}`,
+            borderRadius: "var(--r3)",
+            fontFamily: "var(--font)",
+            color: "var(--t1)",
+            outline: "none",
+            background: checked ? (isCorrect ? "var(--green-l)" : "var(--surf2)") : "var(--surface)",
+          }}
+        />
+
+        {!checked ? (
+          <Button variant="primary" size="md" onClick={onCheck} disabled={!typedAnswer.trim()}>
+            Check
+          </Button>
+        ) : (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "10px 14px",
+              borderRadius: "var(--r3)",
+              background: isCorrect ? "var(--green-l)" : "rgba(239,68,68,.08)",
+            }}
+          >
+            <Icon name={isCorrect ? "check" : "x"} size={16} color={isCorrect ? "var(--green)" : "var(--red)"} />
+            <span style={{ fontSize: 14, fontWeight: 600, color: isCorrect ? "var(--green)" : "var(--t1)" }}>
+              {isCorrect ? "Correct!" : `Answer: ${card.word}`}
+            </span>
+            {card.phonetic && <span style={{ fontSize: 13, color: "var(--t3)", fontFamily: "serif" }}>{card.phonetic}</span>}
+            <button
+              onClick={handleSpeak}
+              title="Listen to pronunciation"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 26,
+                height: 26,
+                borderRadius: "50%",
+                border: "1.5px solid var(--bord2)",
+                background: speaking ? "var(--amber-ll)" : "var(--surf2)",
+                cursor: "pointer",
+                marginLeft: "auto",
+              }}
+            >
+              <Icon name="volume" size={12} color={speaking ? "var(--amber-d)" : "var(--t3)"} />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function FlashCardView({
   card,
@@ -205,9 +349,13 @@ const DUE_FILTERS: SegOption[] = [
 export function FlashcardsScreen({
   cards,
   reviewFlashcard,
+  streak = 0,
+  studiedToday = false,
 }: {
   cards: Flashcard[];
   reviewFlashcard: (id: string, grade: SrsGrade) => Promise<void>;
+  streak?: number;
+  studiedToday?: boolean;
 }) {
   const router = useRouter();
   const [idx, setIdx] = React.useState(0);
@@ -218,6 +366,10 @@ export function FlashcardsScreen({
   const [done, setDone] = React.useState(false);
   const [known, setKnown] = React.useState<Set<string>>(new Set());
   const [studying, setStudying] = React.useState<Set<string>>(new Set());
+  const [studyMode, setStudyMode] = React.useState<"flip" | "type">("flip");
+  const [typedAnswer, setTypedAnswer] = React.useState("");
+  const [checked, setChecked] = React.useState(false);
+  const [isCorrect, setIsCorrect] = React.useState(false);
   const [, startTransition] = React.useTransition();
 
   const knownCount = cards.filter((c) => c.learned).length;
@@ -238,6 +390,9 @@ export function FlashcardsScreen({
     setDone(false);
     setKnown(new Set());
     setStudying(new Set());
+    setTypedAnswer("");
+    setChecked(false);
+    setIsCorrect(false);
   }
 
   function persistReview(id: string, grade: SrsGrade) {
@@ -246,7 +401,17 @@ export function FlashcardsScreen({
 
   function navigate(dir: 1 | -1) {
     setFlipped(false);
+    setTypedAnswer("");
+    setChecked(false);
+    setIsCorrect(false);
     setTimeout(() => setIdx((i) => Math.max(0, Math.min(filtered.length - 1, i + dir))), 150);
+  }
+
+  function handleCheck() {
+    if (!card) return;
+    const correct = typedAnswer.trim().toLowerCase() === card.word.trim().toLowerCase();
+    setIsCorrect(correct);
+    setChecked(true);
   }
 
   function goNext(grade: SrsGrade) {
@@ -262,6 +427,9 @@ export function FlashcardsScreen({
       persistReview(id, grade);
     }
     setFlipped(false);
+    setTypedAnswer("");
+    setChecked(false);
+    setIsCorrect(false);
     setTimeout(() => {
       if (idx + 1 >= filtered.length) setDone(true);
       else setIdx((i) => i + 1);
@@ -274,6 +442,9 @@ export function FlashcardsScreen({
     setDone(false);
     setKnown(new Set());
     setStudying(new Set());
+    setTypedAnswer("");
+    setChecked(false);
+    setIsCorrect(false);
     router.refresh();
   }
 
@@ -322,6 +493,31 @@ export function FlashcardsScreen({
           </div>
         </div>
 
+        {/* Daily streak reminder */}
+        {cards.length > 0 && (streak > 0 || !studiedToday) && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "10px 16px",
+              borderRadius: "var(--r3)",
+              marginBottom: 16,
+              background: studiedToday ? "var(--green-l)" : "var(--amber-ll)",
+              border: `1px solid ${studiedToday ? "var(--green)" : "var(--amber-l)"}`,
+            }}
+          >
+            <Icon name="flame" size={16} color={studiedToday ? "var(--green)" : "var(--amber-d)"} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: studiedToday ? "var(--green)" : "var(--t1)" }}>
+              {streak > 0
+                ? studiedToday
+                  ? `${streak}-day streak — nice work today!`
+                  : `${streak}-day streak — study today to keep it going!`
+                : "Study today to start a streak!"}
+            </span>
+          </div>
+        )}
+
         {/* Controls */}
         {cards.length > 0 && (
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 20 }}>
@@ -349,6 +545,12 @@ export function FlashcardsScreen({
             </div>
             <Segmented value={filter} onChange={(v) => { setFilter(v); resetSession(); }} options={LEVEL_FILTERS} size="sm" />
             <Segmented value={dueFilter} onChange={(v) => { setDueFilter(v); resetSession(); }} options={DUE_FILTERS} size="sm" />
+            <Segmented
+              value={studyMode}
+              onChange={(v) => { setStudyMode(v as "flip" | "type"); resetSession(); }}
+              options={STUDY_MODES}
+              size="sm"
+            />
           </div>
         )}
 
@@ -414,14 +616,26 @@ export function FlashcardsScreen({
           </div>
         ) : (
           <div style={{ maxWidth: 560, margin: "0 auto", paddingTop: 8 }}>
-            {card && <FlashCardView card={card} isFlipped={flipped} onFlip={() => setFlipped((f) => !f)} />}
+            {card && studyMode === "flip" && (
+              <FlashCardView card={card} isFlipped={flipped} onFlip={() => setFlipped((f) => !f)} />
+            )}
+            {card && studyMode === "type" && (
+              <TypingCardView
+                card={card}
+                checked={checked}
+                isCorrect={isCorrect}
+                typedAnswer={typedAnswer}
+                onChangeAnswer={setTypedAnswer}
+                onCheck={handleCheck}
+              />
+            )}
 
             {/* Navigation dots */}
             <div style={{ display: "flex", justifyContent: "center", gap: 6, margin: "16px 0 12px" }}>
               {filtered.map((c, i) => (
                 <div
                   key={c.id}
-                  onClick={() => { setIdx(i); setFlipped(false); }}
+                  onClick={() => { setIdx(i); setFlipped(false); setTypedAnswer(""); setChecked(false); setIsCorrect(false); }}
                   style={{
                     width: i === idx ? 20 : 7,
                     height: 7,
@@ -470,6 +684,7 @@ export function FlashcardsScreen({
                   size="lg"
                   icon={g.icon}
                   onClick={() => goNext(g.grade)}
+                  disabled={studyMode === "type" && !checked}
                   style={{ flex: 1, maxWidth: 140 }}
                 >
                   {g.label}
@@ -478,7 +693,7 @@ export function FlashcardsScreen({
             </div>
 
             <p style={{ textAlign: "center", fontSize: 12, color: "var(--t4)", marginTop: 14 }}>
-              Click the card to flip · {reviewingCount} still to learn
+              {studyMode === "flip" ? "Click the card to flip" : "Type the word, then check your answer"} · {reviewingCount} still to learn
             </p>
           </div>
         )}
