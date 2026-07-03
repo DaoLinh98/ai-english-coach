@@ -33,6 +33,7 @@ export function BatchScreen() {
   const [output, setOutput] = React.useState<string>(() => loadSession().output);
   const [loading, setLoading] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
+  const [speaking, setSpeaking] = React.useState(false);
   const abortRef = React.useRef<AbortController | null>(null);
 
   React.useEffect(() => {
@@ -96,6 +97,18 @@ export function BatchScreen() {
     navigator.clipboard.writeText(output).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
+  }
+
+  function speakOutput() {
+    if (!output || typeof window === "undefined" || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance(output);
+    utt.lang = "vi-VN";
+    utt.rate = 0.9;
+    utt.onstart = () => setSpeaking(true);
+    utt.onend = () => setSpeaking(false);
+    utt.onerror = () => setSpeaking(false);
+    window.speechSynthesis.speak(utt);
   }
 
   function clear() {
@@ -212,15 +225,26 @@ export function BatchScreen() {
               Vietnamese
             </span>
             {output && (
-              <Button
-                variant="ghost"
-                size="xs"
-                icon={copied ? "check" : "copy"}
-                onClick={copyOutput}
-                style={copied ? { color: "var(--green)" } : { color: "var(--t3)" }}
-              >
-                {copied ? "Copied" : "Copy"}
-              </Button>
+              <div style={{ display: "flex", gap: 6 }}>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  icon="volume"
+                  onClick={speakOutput}
+                  style={speaking ? { color: "var(--amber-d)" } : { color: "var(--t3)" }}
+                >
+                  Listen
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  icon={copied ? "check" : "copy"}
+                  onClick={copyOutput}
+                  style={copied ? { color: "var(--green)" } : { color: "var(--t3)" }}
+                >
+                  {copied ? "Copied" : "Copy"}
+                </Button>
+              </div>
             )}
           </div>
           <div
