@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getAiProvider } from "@/lib/ai";
 import type { GeneratedFlashcard } from "@/lib/ai/schema";
+import { reviewCard, type SrsGrade } from "@/lib/srs";
 import { createClient } from "@/lib/supabase/server";
 
 async function requireUser() {
@@ -14,13 +15,44 @@ async function requireUser() {
   return { supabase, user };
 }
 
-export async function toggleLearned(id: string, learned: boolean) {
+
+/**
+ * Grade a card's recall and reschedule it via the SM-2 algorithm.
+ * `learned` is kept in sync as a simple "has this card graduated past its
+ * first successful review" signal, for the existing Known/Reviewing badges.
+ */
+export async function reviewFlashcard(id: string, grade: SrsGrade) {
   const { supabase, user } = await requireUser();
+
+  const { data: current } = await supabase
+    .from("flashcards")
+    .select("ease_factor, interval_days, review_count")
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .single();
+
+  const next = reviewCard(
+    {
+      easeFactor: current?.ease_factor ?? 2.5,
+      intervalDays: current?.interval_days ?? 0,
+      reviewCount: current?.review_count ?? 0,
+    },
+    grade,
+  );
+
   await supabase
     .from("flashcards")
-    .update({ learned, updated_at: new Date().toISOString() })
+    .update({
+      ease_factor: next.easeFactor,
+      interval_days: next.intervalDays,
+      review_count: next.reviewCount,
+      due_date: next.dueDate,
+      learned: next.reviewCount > 0,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", id)
     .eq("user_id", user.id);
+
   revalidatePath("/flashcards");
 }
 

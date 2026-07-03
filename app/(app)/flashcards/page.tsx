@@ -5,7 +5,7 @@ import {
   FlashcardsScreen,
   type Flashcard,
 } from "@/components/screens/FlashcardsScreen";
-import { toggleLearned } from "./actions";
+import { reviewFlashcard } from "./actions";
 
 export default async function FlashcardsPage() {
   const session = await getSessionUser();
@@ -19,7 +19,11 @@ export default async function FlashcardsPage() {
       .select("*")
       .eq("user_id", session.id)
       .order("created_at", { ascending: false });
-    cards = (data ?? []) as Flashcard[];
+    cards = ((data ?? []) as Array<Record<string, unknown>>).map((c) => ({
+      ...c,
+      dueDate: (c.due_date as string) ?? new Date().toLocaleDateString("en-CA"),
+      reviewCount: (c.review_count as number) ?? 0,
+    })) as Flashcard[];
   } catch {
     cards = [];
   }
@@ -27,7 +31,7 @@ export default async function FlashcardsPage() {
   return (
     <FlashcardsScreen
       cards={cards}
-      toggleLearned={toggleLearned}
+      reviewFlashcard={reviewFlashcard}
     />
   );
 }

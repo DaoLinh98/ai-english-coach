@@ -12,6 +12,7 @@ import {
   type SegOption,
 } from "@/components/ui";
 import { exportFlashcards } from "@/lib/export";
+import { isDue, type SrsGrade } from "@/lib/srs";
 
 export type Flashcard = {
   id: string;
@@ -24,7 +25,16 @@ export type Flashcard = {
   synonyms: string[];
   learned: boolean;
   phonetic: string | null;
+  dueDate: string;
+  reviewCount: number;
 };
+
+const GRADE_BUTTONS: { grade: SrsGrade; label: string; icon: string; variant: "secondary" | "primary" }[] = [
+  { grade: "again", label: "Again", icon: "x", variant: "secondary" },
+  { grade: "hard", label: "Hard", icon: "thu-d", variant: "secondary" },
+  { grade: "good", label: "Good", icon: "check", variant: "primary" },
+  { grade: "easy", label: "Easy", icon: "thu-u", variant: "primary" },
+];
 
 const levelColor: Record<string, "green" | "amber" | "purple"> = {
   beginner: "green",
@@ -187,17 +197,23 @@ function FlashCardView({
   );
 }
 
+const DUE_FILTERS: SegOption[] = [
+  { value: "due", label: "Due" },
+  { value: "all", label: "All cards" },
+];
+
 export function FlashcardsScreen({
   cards,
-  toggleLearned,
+  reviewFlashcard,
 }: {
   cards: Flashcard[];
-  toggleLearned: (id: string, learned: boolean) => Promise<void>;
+  reviewFlashcard: (id: string, grade: SrsGrade) => Promise<void>;
 }) {
   const router = useRouter();
   const [idx, setIdx] = React.useState(0);
   const [flipped, setFlipped] = React.useState(false);
   const [filter, setFilter] = React.useState("all");
+  const [dueFilter, setDueFilter] = React.useState("due");
   const [search, setSearch] = React.useState("");
   const [done, setDone] = React.useState(false);
   const [known, setKnown] = React.useState<Set<string>>(new Set());
@@ -205,11 +221,13 @@ export function FlashcardsScreen({
   const [, startTransition] = React.useTransition();
 
   const knownCount = cards.filter((c) => c.learned).length;
+  const dueCount = cards.filter((c) => isDue(c.dueDate)).length;
 
   const filtered = cards.filter((c) => {
     const matchLevel = filter === "all" || c.level === filter;
     const matchSearch = !search || c.word.toLowerCase().includes(search.toLowerCase());
-    return matchLevel && matchSearch;
+    const matchDue = dueFilter === "all" || isDue(c.dueDate);
+    return matchLevel && matchSearch && matchDue;
   });
 
   const card = filtered[idx];
@@ -222,8 +240,8 @@ export function FlashcardsScreen({
     setStudying(new Set());
   }
 
-  function persistLearned(id: string, learned: boolean) {
-    startTransition(() => toggleLearned(id, learned));
+  function persistReview(id: string, grade: SrsGrade) {
+    startTransition(() => reviewFlashcard(id, grade));
   }
 
   function navigate(dir: 1 | -1) {
@@ -231,17 +249,17 @@ export function FlashcardsScreen({
     setTimeout(() => setIdx((i) => Math.max(0, Math.min(filtered.length - 1, i + dir))), 150);
   }
 
-  function goNext(action: "know" | "study") {
+  function goNext(grade: SrsGrade) {
     if (card) {
       const id = card.id;
-      if (action === "know") {
+      if (grade === "good" || grade === "easy") {
         setKnown((p) => new Set([...p, id]));
         setStudying((p) => { const n = new Set(p); n.delete(id); return n; });
       } else {
         setStudying((p) => new Set([...p, id]));
         setKnown((p) => { const n = new Set(p); n.delete(id); return n; });
       }
-      persistLearned(id, action === "know");
+      persistReview(id, grade);
     }
     setFlipped(false);
     setTimeout(() => {
@@ -294,7 +312,7 @@ export function FlashcardsScreen({
               {knownCount} Known
             </Badge>
             <Badge color="amber" icon="refresh">
-              {studying.size} Reviewing
+              {dueCount} Due
             </Badge>
             {cards.length > 0 && (
               <Button variant="secondary" size="sm" icon="download" onClick={handleExport}>
@@ -330,6 +348,7 @@ export function FlashcardsScreen({
               />
             </div>
             <Segmented value={filter} onChange={(v) => { setFilter(v); resetSession(); }} options={LEVEL_FILTERS} size="sm" />
+            <Segmented value={dueFilter} onChange={(v) => { setDueFilter(v); resetSession(); }} options={DUE_FILTERS} size="sm" />
           </div>
         )}
 
@@ -353,6 +372,8 @@ export function FlashcardsScreen({
             title="No flashcards yet"
             subtitle="Add words from the Editor — click '+ Add' next to any vocabulary suggestion."
           />
+        ) : filtered.length === 0 && dueFilter === "due" ? (
+          <EmptyState icon="check" title="All caught up!" subtitle="No cards are due for review right now. Switch to 'All cards' to study ahead of schedule." />
         ) : filtered.length === 0 ? (
           <EmptyState icon="search" title="No cards found" subtitle="Try a different search term or filter." />
         ) : done ? (
@@ -440,26 +461,20 @@ export function FlashcardsScreen({
               </Button>
             </div>
 
-            {/* Study action buttons */}
-            <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-              <Button
-                variant="secondary"
-                size="lg"
-                icon="thu-d"
-                onClick={() => goNext("study")}
-                style={{ flex: 1, maxWidth: 220, color: "var(--t2)" }}
-              >
-                Study Again
-              </Button>
-              <Button
-                variant="primary"
-                size="lg"
-                icon="thu-u"
-                onClick={() => goNext("know")}
-                style={{ flex: 1, maxWidth: 220 }}
-              >
-                I Know This ✓
-              </Button>
+            {/* Study action buttons: SM-2 recall grading */}
+            <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+              {GRADE_BUTTONS.map((g) => (
+                <Button
+                  key={g.grade}
+                  variant={g.variant}
+                  size="lg"
+                  icon={g.icon}
+                  onClick={() => goNext(g.grade)}
+                  style={{ flex: 1, maxWidth: 140 }}
+                >
+                  {g.label}
+                </Button>
+              ))}
             </div>
 
             <p style={{ textAlign: "center", fontSize: 12, color: "var(--t4)", marginTop: 14 }}>
