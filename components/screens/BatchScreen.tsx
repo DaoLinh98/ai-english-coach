@@ -4,6 +4,7 @@
 
 import React from "react";
 import { Button, Icon, Spinner } from "@/components/ui";
+import { speak } from "@/lib/tts";
 
 type Source = "message" | "comment" | "ticket" | "document";
 
@@ -34,6 +35,7 @@ export function BatchScreen() {
   const [loading, setLoading] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   const [speaking, setSpeaking] = React.useState(false);
+  const [speakingInput, setSpeakingInput] = React.useState(false);
   const abortRef = React.useRef<AbortController | null>(null);
 
   React.useEffect(() => {
@@ -100,15 +102,19 @@ export function BatchScreen() {
   }
 
   function speakOutput() {
-    if (!output || typeof window === "undefined" || !window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const utt = new SpeechSynthesisUtterance(output);
-    utt.lang = "vi-VN";
-    utt.rate = 0.9;
-    utt.onstart = () => setSpeaking(true);
-    utt.onend = () => setSpeaking(false);
-    utt.onerror = () => setSpeaking(false);
-    window.speechSynthesis.speak(utt);
+    speak(output, "vi-VN", {
+      onStart: () => setSpeaking(true),
+      onEnd: () => setSpeaking(false),
+      onError: () => setSpeaking(false),
+    });
+  }
+
+  function speakInput() {
+    speak(input, "en-US", {
+      onStart: () => setSpeakingInput(true),
+      onEnd: () => setSpeakingInput(false),
+      onError: () => setSpeakingInput(false),
+    });
   }
 
   function clear() {
@@ -187,7 +193,20 @@ export function BatchScreen() {
             <span style={{ fontSize: 12, fontWeight: 600, color: "var(--t3)", letterSpacing: ".04em", textTransform: "uppercase" }}>
               English
             </span>
-            <span style={{ fontSize: 11, color: "var(--t4)" }}>Press Enter to translate</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {input && (
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  icon="volume"
+                  onClick={speakInput}
+                  style={speakingInput ? { color: "var(--amber-d)" } : { color: "var(--t3)" }}
+                >
+                  Listen
+                </Button>
+              )}
+              <span style={{ fontSize: 11, color: "var(--t4)" }}>Press Enter to translate</span>
+            </div>
           </div>
           <textarea
             value={input}

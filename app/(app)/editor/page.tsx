@@ -4,6 +4,7 @@ import React from "react";
 import { Button, EmptyState, Icon, Spinner } from "@/components/ui";
 import { addFlashcardDirect } from "@/app/(app)/flashcards/actions";
 import type { ChangeExplanation } from "@/lib/ai/schema";
+import { speak } from "@/lib/tts";
 
 const STOP_WORDS = new Set([
   "the","and","that","have","this","with","from","they","will","been","their",
@@ -189,15 +190,11 @@ export default function EditorPage() {
   }
 
   function handleSpeak() {
-    if (!translatedText || typeof window === "undefined" || !window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const utt = new SpeechSynthesisUtterance(translatedText);
-    utt.lang = "en-US";
-    utt.rate = 0.9;
-    utt.onstart = () => setSpeaking(true);
-    utt.onend = () => setSpeaking(false);
-    utt.onerror = () => setSpeaking(false);
-    window.speechSynthesis.speak(utt);
+    speak(translatedText, "en-US", {
+      onStart: () => setSpeaking(true),
+      onEnd: () => setSpeaking(false),
+      onError: () => setSpeaking(false),
+    });
   }
 
   async function handleAddFlashcard(phrase: string) {
