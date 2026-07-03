@@ -131,6 +131,18 @@ const IP: Record<string, string[]> = {
     "M12 9v4",
     "M12 17h.01",
   ],
+  sun: [
+    "M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10z",
+    "M12 1v2",
+    "M12 21v2",
+    "M4.22 4.22l1.42 1.42",
+    "M18.36 18.36l1.42 1.42",
+    "M1 12h2",
+    "M21 12h2",
+    "M4.22 19.78l1.42-1.42",
+    "M18.36 5.64l1.42-1.42",
+  ],
+  moon: ["M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"],
 };
 
 export type IconName = keyof typeof IP | string;
@@ -469,12 +481,17 @@ export function Card({
 export function Toggle({
   value,
   onChange,
+  "aria-label": ariaLabel,
 }: {
   value: boolean;
   onChange: (v: boolean) => void;
+  "aria-label"?: string;
 }) {
   return (
     <div
+      role="switch"
+      aria-checked={value}
+      aria-label={ariaLabel}
       onClick={() => onChange(!value)}
       style={{
         width: 42,

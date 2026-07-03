@@ -4,7 +4,7 @@
 
 import React from "react";
 import { useRouter } from "next/navigation";
-import { Badge, Button, Icon, ProgressBar, Spinner } from "@/components/ui";
+import { Badge, Button, Icon, ProgressBar, Spinner, Toggle } from "@/components/ui";
 import type { QuizQuestion } from "@/lib/ai";
 import type { QuizPayload } from "@/app/(app)/quiz/actions";
 
@@ -21,6 +21,11 @@ const catLabel: Record<string, string> = {
 
 type Phase = "ready" | "loading" | "quiz" | "results";
 type Answer = { qId: number; chosen: number; correct: boolean };
+
+// Seconds allotted per question when timed mode is enabled.
+const QUESTION_TIME_SEC = 30;
+// How long to show the "time's up" state before auto-advancing.
+const TIMEOUT_ADVANCE_DELAY_MS = 1200;
 
 export function QuizScreen({
   generateQuiz,
@@ -47,6 +52,9 @@ export function QuizScreen({
   const [answered, setAnswered] = React.useState(false);
   const [answers, setAnswers] = React.useState<Answer[]>([]);
   const [error, setError] = React.useState<string | null>(null);
+  const [timedMode, setTimedMode] = React.useState(false);
+  const [timeLeft, setTimeLeft] = React.useState(QUESTION_TIME_SEC);
+  const [timedOut, setTimedOut] = React.useState(false);
   const recordedRef = React.useRef(false);
 
   const totalQ = questions.length;
@@ -63,6 +71,8 @@ export function QuizScreen({
       setSelected(null);
       setAnswered(false);
       setAnswers([]);
+      setTimeLeft(QUESTION_TIME_SEC);
+      setTimedOut(false);
       recordedRef.current = false;
       setPhase("quiz");
     } catch {
@@ -79,14 +89,47 @@ export function QuizScreen({
     setAnswers((prev) => [...prev, { qId: qIdx, chosen: i, correct: i === q.answer }]);
   }
 
+  // Timeout is treated the same as a wrong/no answer: recorded with chosen -1
+  // so recordAttempt sees a consistent shape whether the run was timed or not.
+  function handleTimeout() {
+    if (answered) return;
+    setAnswered(true);
+    setTimedOut(true);
+    setAnswers((prev) => [...prev, { qId: qIdx, chosen: -1, correct: false }]);
+  }
+
   function handleNext() {
     if (qIdx + 1 >= totalQ) setPhase("results");
     else {
       setQIdx((i) => i + 1);
       setSelected(null);
       setAnswered(false);
+      setTimedOut(false);
+      setTimeLeft(QUESTION_TIME_SEC);
     }
   }
+
+  // Countdown ticker — only runs in timed mode, during the quiz, while the
+  // current question is still unanswered.
+  React.useEffect(() => {
+    if (phase !== "quiz" || !timedMode || answered) return;
+    if (timeLeft <= 0) {
+      const t = setTimeout(() => handleTimeout(), 0);
+      return () => clearTimeout(t);
+    }
+    const t = setTimeout(() => setTimeLeft((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, timedMode, answered, timeLeft, qIdx]);
+
+  // After a timeout, auto-advance to the next question so the quiz never
+  // gets stuck waiting for a click that isn't coming.
+  React.useEffect(() => {
+    if (!timedOut) return;
+    const t = setTimeout(() => handleNext(), TIMEOUT_ADVANCE_DELAY_MS);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timedOut]);
 
   // Persist the attempt once when results are shown.
   React.useEffect(() => {
@@ -138,6 +181,27 @@ export function QuizScreen({
             </p>
             {phase === "ready" && (
               <>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    padding: "12px 14px",
+                    background: "var(--surf2)",
+                    borderRadius: "var(--r3)",
+                    marginBottom: 18,
+                    textAlign: "left",
+                  }}
+                >
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "var(--t1)" }}>Timed mode</p>
+                    <p style={{ fontSize: 11, color: "var(--t3)" }}>
+                      {QUESTION_TIME_SEC}s countdown per question
+                    </p>
+                  </div>
+                  <Toggle value={timedMode} onChange={setTimedMode} aria-label="Timed mode" />
+                </div>
                 <Button variant="primary" size="md" icon="sparkles" onClick={handleStart} full>
                   Generate Quiz
                 </Button>
@@ -248,7 +312,9 @@ export function QuizScreen({
                       <p style={{ fontSize: 12, color: ans.correct ? "var(--green)" : "var(--red)", marginBottom: ans.correct ? 0 : 3 }}>
                         {ans.correct
                           ? `Correct: ${question.opts[question.answer]}`
-                          : `Your answer: ${question.opts[ans.chosen]}`}
+                          : ans.chosen === -1
+                            ? "Your answer: (no answer — time ran out)"
+                            : `Your answer: ${question.opts[ans.chosen]}`}
                       </p>
                       {!ans.correct && (
                         <p style={{ fontSize: 12, color: "var(--green)" }}>
@@ -281,6 +347,11 @@ export function QuizScreen({
             </p>
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            {timedMode && (
+              <Badge color={timeLeft <= 10 ? "red" : "blue"} icon="zap">
+                {timedOut ? "Time's up!" : `${timeLeft}s`}
+              </Badge>
+            )}
             <Badge color="amber">
               Question {qIdx + 1} / {totalQ}
             </Badge>
@@ -399,7 +470,11 @@ export function QuizScreen({
                 </div>
                 <div>
                   <p style={{ fontWeight: 700, fontSize: 13, color: "var(--t1)", marginBottom: 4 }}>
-                    {selected === q.answer ? "Correct!" : "Not quite — here's why:"}
+                    {timedOut
+                      ? "Time's up — here's why:"
+                      : selected === q.answer
+                        ? "Correct!"
+                        : "Not quite — here's why:"}
                   </p>
                   <p style={{ fontSize: 13, color: "var(--t2)", lineHeight: 1.6 }}>{q.expl}</p>
                 </div>

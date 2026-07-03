@@ -6,6 +6,7 @@ import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon, Avatar, Button, type IconName } from "@/components/ui";
+import { useTheme } from "@/components/ThemeProvider";
 
 const NAV: { id: string; icon: IconName; label: string }[] = [
   { id: "dashboard", icon: "home", label: "Dashboard" },
@@ -132,6 +133,17 @@ export function Sidebar({
         })}
       </nav>
 
+      {/* Theme toggle */}
+      <div
+        style={{
+          padding: compact ? "0 0 8px" : "0 8px 8px",
+          display: "flex",
+          justifyContent: compact ? "center" : "flex-start",
+        }}
+      >
+        <ThemeToggle compact={compact} />
+      </div>
+
       {/* User profile */}
       <div
         style={{
@@ -201,6 +213,29 @@ export function Sidebar({
         )}
       </div>
     </aside>
+  );
+}
+
+function ThemeToggle({ compact }: { compact: boolean }) {
+  const { theme, toggleTheme } = useTheme();
+  const isDark = theme === "dark";
+
+  return (
+    <Button
+      variant="ghost"
+      size="xs"
+      icon={isDark ? "sun" : "moon"}
+      title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      style={{
+        color: "var(--t3)",
+        padding: "6px",
+        width: compact ? "auto" : "100%",
+        justifyContent: compact ? "center" : "flex-start",
+      }}
+      onClick={toggleTheme}
+    >
+      {!compact && (isDark ? "Light mode" : "Dark mode")}
+    </Button>
   );
 }
 

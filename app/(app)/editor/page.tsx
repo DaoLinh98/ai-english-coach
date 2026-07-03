@@ -1,9 +1,10 @@
 "use client";
 
 import React from "react";
-import { Button, EmptyState, Icon, Spinner } from "@/components/ui";
+import { Button, EmptyState, Icon, Segmented, Spinner } from "@/components/ui";
 import { addFlashcardDirect } from "@/app/(app)/flashcards/actions";
 import type { ChangeExplanation } from "@/lib/ai/schema";
+import { speak } from "@/lib/tts";
 
 const STOP_WORDS = new Set([
   "the","and","that","have","this","with","from","they","will","been","their",
@@ -20,6 +21,7 @@ const STOP_WORDS = new Set([
 ]);
 
 type Mode = "input" | "loading" | "result";
+type ResultView = "inline" | "compare";
 
 interface EditorState {
   inputText: string;
@@ -91,6 +93,7 @@ export default function EditorPage() {
   const [explanations, setExplanations] = React.useState<ChangeExplanation[]>([]);
   const [explanationsLoading, setExplanationsLoading] = React.useState(false);
   const [expandedExplanation, setExpandedExplanation] = React.useState<number | null>(null);
+  const [resultView, setResultView] = React.useState<ResultView>("inline");
 
   React.useEffect(() => {
     const h = () => setNarrow(window.innerWidth < 960);
@@ -119,6 +122,7 @@ export default function EditorPage() {
     setAddedWords(new Set());
     setExplanations([]);
     setExpandedExplanation(null);
+    setResultView("inline");
 
     try {
       const res = await fetch("/api/translate", {
@@ -179,6 +183,7 @@ export default function EditorPage() {
     setAddedWords(new Set());
     setExplanations([]);
     setExpandedExplanation(null);
+    setResultView("inline");
     try { sessionStorage.removeItem(SESSION_KEY); } catch {}
   }
 
@@ -189,15 +194,11 @@ export default function EditorPage() {
   }
 
   function handleSpeak() {
-    if (!translatedText || typeof window === "undefined" || !window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const utt = new SpeechSynthesisUtterance(translatedText);
-    utt.lang = "en-US";
-    utt.rate = 0.9;
-    utt.onstart = () => setSpeaking(true);
-    utt.onend = () => setSpeaking(false);
-    utt.onerror = () => setSpeaking(false);
-    window.speechSynthesis.speak(utt);
+    speak(translatedText, "en-US", {
+      onStart: () => setSpeaking(true),
+      onEnd: () => setSpeaking(false),
+      onError: () => setSpeaking(false),
+    });
   }
 
   async function handleAddFlashcard(phrase: string) {
@@ -235,7 +236,16 @@ export default function EditorPage() {
           </div>
         </div>
         {mode === "result" && (
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Segmented
+              size="sm"
+              value={resultView}
+              onChange={setResultView}
+              options={[
+                { value: "inline", label: "Inline", icon: "file-txt" },
+                { value: "compare", label: "Compare", icon: "columns" },
+              ]}
+            />
             <Button variant="ghost" size="sm" icon="volume" onClick={handleSpeak} style={speaking ? { color: "var(--amber-d)" } : {}}>
               Listen
             </Button>
@@ -304,44 +314,109 @@ export default function EditorPage() {
 
           {mode === "result" && (
             <div className="a-up" style={{ height: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
-              {/* Original (collapsed) */}
-              <details style={{ flexShrink: 0 }}>
-                <summary style={{ fontSize: 12, fontWeight: 600, color: "var(--t3)", cursor: "pointer", userSelect: "none", padding: "4px 0" }}>
-                  Original text
-                </summary>
-                <div style={{ marginTop: 8, padding: "14px 16px", background: "var(--surf2)", borderRadius: "var(--r3)", border: "1px solid var(--bord2)", fontSize: 14, color: "var(--t3)", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
-                  {inputText}
-                </div>
-              </details>
+              {resultView === "inline" ? (
+                <>
+                  {/* Original (collapsed) */}
+                  <details style={{ flexShrink: 0 }}>
+                    <summary style={{ fontSize: 12, fontWeight: 600, color: "var(--t3)", cursor: "pointer", userSelect: "none", padding: "4px 0" }}>
+                      Original text
+                    </summary>
+                    <div style={{ marginTop: 8, padding: "14px 16px", background: "var(--surf2)", borderRadius: "var(--r3)", border: "1px solid var(--bord2)", fontSize: 14, color: "var(--t3)", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
+                      {inputText}
+                    </div>
+                  </details>
 
-              {/* Translated result */}
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--green)", display: "inline-block" }} />
-                  <span style={{ fontSize: 12, fontWeight: 700, color: "var(--t2)", textTransform: "uppercase", letterSpacing: ".4px" }}>English Result</span>
-                </div>
+                  {/* Translated result */}
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--green)", display: "inline-block" }} />
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--t2)", textTransform: "uppercase", letterSpacing: ".4px" }}>English Result</span>
+                    </div>
+                    <div
+                      style={{
+                        flex: 1,
+                        padding: "20px",
+                        fontSize: 15,
+                        lineHeight: 1.9,
+                        color: "var(--t1)",
+                        fontFamily: "var(--font)",
+                        background: "var(--surface)",
+                        border: "1.5px solid var(--bord2)",
+                        borderRadius: "var(--r4)",
+                        overflowY: "auto",
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      {translatedText}
+                      {/* blinking cursor while streaming */}
+                      {mode === "result" && translatedText.length > 0 && (
+                        <span className="stream-cursor" />
+                      )}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* Compare view: original vs corrected side by side (stacked on narrow viewports) */
                 <div
                   style={{
                     flex: 1,
-                    padding: "20px",
-                    fontSize: 15,
-                    lineHeight: 1.9,
-                    color: "var(--t1)",
-                    fontFamily: "var(--font)",
-                    background: "var(--surface)",
-                    border: "1.5px solid var(--bord2)",
-                    borderRadius: "var(--r4)",
-                    overflowY: "auto",
-                    whiteSpace: "pre-wrap",
+                    display: "flex",
+                    flexDirection: narrow ? "column" : "row",
+                    gap: 12,
+                    minHeight: 0,
                   }}
                 >
-                  {translatedText}
-                  {/* blinking cursor while streaming */}
-                  {mode === "result" && translatedText.length > 0 && (
-                    <span className="stream-cursor" />
-                  )}
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8, minHeight: narrow ? 180 : undefined }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--t3)", display: "inline-block" }} />
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--t2)", textTransform: "uppercase", letterSpacing: ".4px" }}>Original</span>
+                    </div>
+                    <div
+                      style={{
+                        flex: 1,
+                        padding: "20px",
+                        fontSize: 15,
+                        lineHeight: 1.9,
+                        color: "var(--t3)",
+                        fontFamily: "var(--font)",
+                        background: "var(--surf2)",
+                        border: "1.5px solid var(--bord2)",
+                        borderRadius: "var(--r4)",
+                        overflowY: "auto",
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      {inputText}
+                    </div>
+                  </div>
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8, minHeight: narrow ? 180 : undefined }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--green)", display: "inline-block" }} />
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--t2)", textTransform: "uppercase", letterSpacing: ".4px" }}>Corrected</span>
+                    </div>
+                    <div
+                      style={{
+                        flex: 1,
+                        padding: "20px",
+                        fontSize: 15,
+                        lineHeight: 1.9,
+                        color: "var(--t1)",
+                        fontFamily: "var(--font)",
+                        background: "var(--surface)",
+                        border: "1.5px solid var(--green)",
+                        borderRadius: "var(--r4)",
+                        overflowY: "auto",
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      {translatedText}
+                      {mode === "result" && translatedText.length > 0 && (
+                        <span className="stream-cursor" />
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Grammar notes: per-mistake explanations */}
               {(explanationsLoading || explanations.length > 0) && (
