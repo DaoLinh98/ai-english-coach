@@ -24,6 +24,8 @@ export type Flashcard = {
   synonyms: string[];
   learned: boolean;
   phonetic: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 const levelColor: Record<string, "green" | "amber" | "purple"> = {
@@ -190,9 +192,13 @@ function FlashCardView({
 export function FlashcardsScreen({
   cards,
   toggleLearned,
+  streak = 0,
+  studiedToday = false,
 }: {
   cards: Flashcard[];
   toggleLearned: (id: string, learned: boolean) => Promise<void>;
+  streak?: number;
+  studiedToday?: boolean;
 }) {
   const router = useRouter();
   const [idx, setIdx] = React.useState(0);
@@ -303,6 +309,31 @@ export function FlashcardsScreen({
             )}
           </div>
         </div>
+
+        {/* Daily streak reminder */}
+        {cards.length > 0 && (streak > 0 || !studiedToday) && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "10px 16px",
+              borderRadius: "var(--r3)",
+              marginBottom: 16,
+              background: studiedToday ? "var(--green-l)" : "var(--amber-ll)",
+              border: `1px solid ${studiedToday ? "var(--green)" : "var(--amber-l)"}`,
+            }}
+          >
+            <Icon name="flame" size={16} color={studiedToday ? "var(--green)" : "var(--amber-d)"} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: studiedToday ? "var(--green)" : "var(--t1)" }}>
+              {streak > 0
+                ? studiedToday
+                  ? `${streak}-day streak — nice work today!`
+                  : `${streak}-day streak — study today to keep it going!`
+                : "Study today to start a streak!"}
+            </span>
+          </div>
+        )}
 
         {/* Controls */}
         {cards.length > 0 && (
