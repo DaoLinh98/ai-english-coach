@@ -6,6 +6,7 @@ import {
   type DashboardActivity,
   type DashboardData,
   type DashboardStat,
+  type ScoreTrendPoint,
 } from "@/components/screens/DashboardScreen";
 
 type HistoryRow = {
@@ -83,6 +84,7 @@ export default async function DashboardPage() {
   let totalCorrections = 0;
   let cardsLearned = 0;
   let accuracy: number | null = null;
+  let scoreTrend: ScoreTrendPoint[] = [];
 
   try {
     const supabase = await createClient();
@@ -116,14 +118,20 @@ export default async function DashboardPage() {
 
     const { data: attempts } = await supabase
       .from("quiz_attempts")
-      .select("score,total")
-      .eq("user_id", session.id);
-    const rows = (attempts ?? []) as { score: number; total: number }[];
+      .select("id,score,total,created_at")
+      .eq("user_id", session.id)
+      .order("created_at", { ascending: true });
+    const rows = (attempts ?? []) as { id: string; score: number; total: number; created_at: string }[];
     if (rows.length) {
       const score = rows.reduce((s, r) => s + r.score, 0);
       const total = rows.reduce((s, r) => s + r.total, 0);
       accuracy = total > 0 ? Math.round((score / total) * 100) : null;
     }
+    scoreTrend = rows.slice(-20).map((r) => ({
+      id: r.id,
+      pct: r.total > 0 ? Math.round((r.score / r.total) * 100) : 0,
+      date: r.created_at,
+    }));
   } catch {
     // Tolerate a partially-provisioned DB; render with whatever we have.
   }
@@ -193,6 +201,7 @@ export default async function DashboardPage() {
     weeklyGoal,
     weeklyWords,
     streak: computeStreak(histories),
+    scoreTrend,
   };
 
   return <DashboardScreen data={data} />;
