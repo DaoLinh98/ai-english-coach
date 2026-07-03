@@ -72,6 +72,24 @@ export const generatedQuizSchema = z.object({
 });
 export type GeneratedQuiz = z.infer<typeof generatedQuizSchema>;
 
+// ── Per-mistake change explanations (Editor "What changed" panel) ──────────
+export const changeExplanationSchema = z.object({
+  /** Exact substring of the CORRECTED text this explanation refers to. */
+  text: z.string().min(1),
+  /** Short human label, e.g. "Subject-verb agreement". */
+  label: z.string(),
+  /** One- or two-sentence explanation of why this change was made / the rule involved. */
+  expl: z.string(),
+  /** The grammar/style rule name, e.g. "Passive Voice". */
+  rule: z.string(),
+});
+export type ChangeExplanation = z.infer<typeof changeExplanationSchema>;
+
+export const changeExplanationResultSchema = z.object({
+  items: z.array(changeExplanationSchema),
+});
+export type ChangeExplanationResult = z.infer<typeof changeExplanationResultSchema>;
+
 // ── Smart suggestions (next-sentence) ───────────────────────────────────────
 export const continuationSchema = z.object({
   /** 1-3 natural next-sentence options that continue the user's draft. */
