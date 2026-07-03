@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
+import { ThemeProvider } from "@/components/ThemeProvider";
+import { themeInitScript } from "@/lib/theme";
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -18,8 +20,15 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={jakarta.variable}>
-      <body>{children}</body>
+    <html lang="en" className={jakarta.variable} suppressHydrationWarning>
+      <head>
+        {/* Sets data-theme on <html> before hydration to avoid a flash of
+            the wrong theme. See lib/theme.ts for the shared theming contract. */}
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript() }} />
+      </head>
+      <body>
+        <ThemeProvider>{children}</ThemeProvider>
+      </body>
     </html>
   );
 }
