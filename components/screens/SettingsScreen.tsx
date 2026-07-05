@@ -108,6 +108,7 @@ const inputStyle: React.CSSProperties = {
   color: "var(--t1)",
   outline: "none",
   width: 240,
+  background: "var(--surface)",
 };
 
 export function SettingsScreen({
