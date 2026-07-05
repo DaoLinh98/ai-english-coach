@@ -15,6 +15,7 @@
 }
 
 :root {
+  color-scheme: light;
   --font: var(--font-jakarta), system-ui, sans-serif;
 
   /* Brand — Amber / Orange */
@@ -90,6 +91,8 @@
    in sync when adding new tokens.
    =========================================================================== */
 :root[data-theme="dark"] {
+  color-scheme: dark;
+
   /* Brand — Amber / Orange (kept vivid enough to read on dark surfaces) */
   --amber: #f59e0b;
   --amber-d: #fbbf24;
