@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getAiProvider } from "@/lib/ai";
+import { isAiOverloaded, isAiQuotaExhausted } from "@/lib/ai/gemini";
 import type { GeneratedFlashcard } from "@/lib/ai/schema";
 import { reviewCard, type SrsGrade } from "@/lib/srs";
 import { createClient } from "@/lib/supabase/server";
@@ -109,14 +110,13 @@ export async function addFlashcardDirect(
     try {
       card = await getAiProvider().generateFlashcard({ word: w });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const busy = /"code":\s*(503|429)|UNAVAILABLE|RESOURCE_EXHAUSTED/i.test(msg);
-      return {
-        success: false,
-        message: busy
-          ? "AI is busy right now — please try again in a moment"
-          : "AI generation failed — please try again",
-      };
+      let message = "AI generation failed — please try again";
+      if (isAiQuotaExhausted(err)) {
+        message = "Daily AI limit reached — flashcard generation will resume once the quota resets";
+      } else if (isAiOverloaded(err)) {
+        message = "AI is busy right now — please try again in a moment";
+      }
+      return { success: false, message };
     }
   }
 
