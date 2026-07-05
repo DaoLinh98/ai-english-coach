@@ -132,6 +132,12 @@ export async function addFlashcardDirect(
     if (error.code === "23505") {
       return { success: false, message: `"${w}" is already in your deck` };
     }
+    console.error("addFlashcardDirect insert failed:", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+    });
     return { success: false, message: "Failed to save — please try again" };
   }
 
