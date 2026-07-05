@@ -342,3 +342,7 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.themed-textarea::placeholder {
+  color: var(--t4);
+  opacity: 1;
+}
