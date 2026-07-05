@@ -51,6 +51,13 @@ export interface AiProvider {
   generateFlashcard(
     input: GenerateFlashcardInput,
   ): Promise<GeneratedFlashcard>;
+  /**
+   * Generate flashcards for several words in a single call. Used to
+   * pre-fetch the Editor's vocabulary panel so "+ Add" is instant and
+   * doesn't fire a fresh model call (and a fresh failure point) per click.
+   * Malformed items are dropped rather than failing the whole batch.
+   */
+  generateFlashcards(words: string[]): Promise<GeneratedFlashcard[]>;
   generateQuiz(input: GenerateQuizInput): Promise<GeneratedQuiz>;
   suggestContinuation(
     input: SuggestContinuationInput,

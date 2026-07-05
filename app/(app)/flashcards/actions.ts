@@ -63,11 +63,19 @@ export async function deleteFlashcard(id: string) {
 }
 
 /**
- * Directly generate and save a flashcard for a word/phrase from the Editor.
- * Called immediately when the user clicks "+ Add" — no localStorage queue needed.
+ * Directly save a flashcard for a word/phrase from the Editor. Called
+ * immediately when the user clicks "+ Add" — no localStorage queue needed.
+ *
+ * `draft`, when provided, is a flashcard already generated for this word by
+ * the Editor's batched pre-fetch (see /api/vocab-flashcards). Passing it
+ * skips the per-click model call entirely, which is both faster and removes
+ * the model call as a failure point for the common case; a fresh call only
+ * happens when no draft is available (e.g. the batch pre-fetch missed/failed
+ * for this word).
  */
 export async function addFlashcardDirect(
   phrase: string,
+  draft?: GeneratedFlashcard,
 ): Promise<{ success: boolean; message: string }> {
   const w = phrase.trim();
   if (!w) return { success: false, message: "Empty phrase" };
@@ -82,7 +90,8 @@ export async function addFlashcardDirect(
     return { success: false, message: "Sign in to save flashcards" };
   }
 
-  // Duplicate check
+  // Duplicate check (normalised — the DB unique index below is the atomic
+  // source of truth; this just gives a friendlier message in the common case).
   const { data: existing } = await supabase
     .from("flashcards")
     .select("id")
@@ -94,10 +103,14 @@ export async function addFlashcardDirect(
   }
 
   let card: GeneratedFlashcard;
-  try {
-    card = await getAiProvider().generateFlashcard({ word: w });
-  } catch {
-    return { success: false, message: "AI generation failed — please try again" };
+  if (draft) {
+    card = draft;
+  } else {
+    try {
+      card = await getAiProvider().generateFlashcard({ word: w });
+    } catch {
+      return { success: false, message: "AI generation failed — please try again" };
+    }
   }
 
   const { error } = await supabase.from("flashcards").insert({
@@ -113,7 +126,14 @@ export async function addFlashcardDirect(
     // No explicit tag at creation time — default to part-of-speech.
     tag: card.pos || null,
   });
-  if (error) return { success: false, message: "Failed to save — please try again" };
+  if (error) {
+    // Unique violation from flashcards_user_word_unique — a concurrent click
+    // beat this one to the insert; treat it as a duplicate, not a failure.
+    if (error.code === "23505") {
+      return { success: false, message: `"${w}" is already in your deck` };
+    }
+    return { success: false, message: "Failed to save — please try again" };
+  }
 
   revalidatePath("/flashcards");
   return { success: true, message: `"${card.word}" added to Flashcards!` };

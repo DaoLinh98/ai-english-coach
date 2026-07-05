@@ -3,7 +3,7 @@
 import React from "react";
 import { Button, EmptyState, Icon, Segmented, Spinner } from "@/components/ui";
 import { addFlashcardDirect } from "@/app/(app)/flashcards/actions";
-import type { ChangeExplanation } from "@/lib/ai/schema";
+import type { ChangeExplanation, GeneratedFlashcard } from "@/lib/ai/schema";
 import { speak } from "@/lib/tts";
 
 const STOP_WORDS = new Set([
@@ -31,24 +31,14 @@ interface EditorState {
 
 const SESSION_KEY = "editorState";
 
+// Adjacent word pairs used to produce meaningless "vocabulary" like "each
+// issue" or "implement issues" — they're grammatically adjacent, not an
+// actual phrase worth learning. Single real words are a far more reliable
+// signal, so that's all we surface.
 function extractVocab(text: string): string[] {
   const tokens = text.toLowerCase().match(/\b[a-z]+\b/g) ?? [];
-
-  // Bigrams: both words 4+ chars, neither a stop word
-  const bigrams: string[] = [];
-  for (let i = 0; i < tokens.length - 1; i++) {
-    const a = tokens[i], b = tokens[i + 1];
-    if (a.length >= 4 && b.length >= 4 && !STOP_WORDS.has(a) && !STOP_WORDS.has(b)) {
-      bigrams.push(`${a} ${b}`);
-    }
-  }
-  const uniqBigrams = [...new Set(bigrams)].slice(0, 8);
-
-  // Single words: 6+ chars, not a stop word, not already covered by a bigram
-  const bigWordSet = new Set(uniqBigrams.flatMap((b) => b.split(" ")));
-  const singles = [...new Set(tokens.filter((w) => w.length >= 6 && !STOP_WORDS.has(w) && !bigWordSet.has(w)))];
-
-  return [...uniqBigrams, ...singles].slice(0, 12);
+  const singles = [...new Set(tokens.filter((w) => w.length >= 6 && !STOP_WORDS.has(w)))];
+  return singles.slice(0, 10);
 }
 
 function loadSession(): Partial<EditorState> {
@@ -86,6 +76,7 @@ export default function EditorPage() {
   });
   const [addedWords, setAddedWords] = React.useState<Set<string>>(new Set());
   const [addingWords, setAddingWords] = React.useState<Set<string>>(new Set());
+  const [vocabDrafts, setVocabDrafts] = React.useState<Record<string, GeneratedFlashcard>>({});
   const [toast, setToast] = React.useState<string | null>(null);
   const [narrow, setNarrow] = React.useState(false);
   const [copyDone, setCopyDone] = React.useState(false);
@@ -120,6 +111,7 @@ export default function EditorPage() {
     setTranslatedText("");
     setVocabSuggestions([]);
     setAddedWords(new Set());
+    setVocabDrafts({});
     setExplanations([]);
     setExpandedExplanation(null);
     setResultView("inline");
@@ -149,11 +141,38 @@ export default function EditorPage() {
         setTranslatedText(full);
       }
 
-      setVocabSuggestions(extractVocab(full));
+      const vocab = extractVocab(full);
+      setVocabSuggestions(vocab);
       fetchExplanations(text, full);
+      fetchVocabDrafts(vocab);
     } catch {
       setMode("input");
       showToast("Translation failed — please try again.");
+    }
+  }
+
+  /**
+   * Pre-generates flashcard content for all vocabulary suggestions in one
+   * batched model call, so "+ Add" can persist instantly without a fresh
+   * (and independently fail-able) model call per click. Best-effort: on
+   * failure, words are simply missing from the cache and "+ Add" falls back
+   * to generating on demand.
+   */
+  async function fetchVocabDrafts(words: string[]) {
+    if (words.length === 0) return;
+    try {
+      const res = await fetch("/api/vocab-flashcards", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ words }),
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as { cards?: GeneratedFlashcard[] };
+      const drafts: Record<string, GeneratedFlashcard> = {};
+      for (const card of data.cards ?? []) drafts[card.word.toLowerCase()] = card;
+      setVocabDrafts(drafts);
+    } catch {
+      // best-effort — "+ Add" falls back to generating on demand
     }
   }
 
@@ -181,6 +200,7 @@ export default function EditorPage() {
     setTranslatedText("");
     setVocabSuggestions([]);
     setAddedWords(new Set());
+    setVocabDrafts({});
     setExplanations([]);
     setExpandedExplanation(null);
     setResultView("inline");
@@ -204,7 +224,8 @@ export default function EditorPage() {
   async function handleAddFlashcard(phrase: string) {
     setAddingWords((prev) => new Set([...prev, phrase]));
     try {
-      const result = await addFlashcardDirect(phrase);
+      const draft = vocabDrafts[phrase.toLowerCase()];
+      const result = await addFlashcardDirect(phrase, draft);
       if (result.success) {
         setAddedWords((prev) => new Set([...prev, phrase]));
       }
