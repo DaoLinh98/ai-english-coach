@@ -214,6 +214,7 @@ export function BatchScreen() {
             onKeyDown={handleKeyDown}
             spellCheck={false}
             placeholder={currentSource.placeholder}
+            className="themed-textarea"
             style={{
               flex: 1,
               padding: "20px",
