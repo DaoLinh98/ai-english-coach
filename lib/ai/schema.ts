@@ -53,6 +53,11 @@ export const generatedFlashcardSchema = z.object({
 });
 export type GeneratedFlashcard = z.infer<typeof generatedFlashcardSchema>;
 
+/** Loose envelope for batch generation — items are validated individually so one malformed card doesn't discard the whole batch. */
+export const generatedFlashcardBatchSchema = z.object({
+  cards: z.array(z.unknown()),
+});
+
 // ── Quiz generation ─────────────────────────────────────────────────────────
 export const quizCategorySchema = z.enum(["grammar", "vocabulary", "style"]);
 

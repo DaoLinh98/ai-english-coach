@@ -2,9 +2,11 @@ import { GoogleGenAI } from "@google/genai";
 import {
   continuationSchema,
   correctionResultSchema,
+  generatedFlashcardBatchSchema,
   generatedFlashcardSchema,
   generatedQuizSchema,
 } from "./schema";
+import type { GeneratedFlashcard } from "./schema";
 import type {
   AiProvider,
   CorrectContext,
@@ -93,6 +95,38 @@ Return ONLY a JSON object (no markdown) with this exact shape:
 }`;
 }
 
+function buildFlashcardBatchPrompt(words: string[]): string {
+  const list = words.map((w) => `"${w}"`).join(", ");
+  return `Create English vocabulary flashcards for each of these words/phrases: ${list}.
+
+Return ONLY a JSON object (no markdown) with this exact shape:
+{
+  "cards": [
+    {
+      "word": string,        // the headword, cleaned up — must match one of the input words
+      "pos": string,         // part of speech, e.g. "verb", "noun", "adjective"
+      "level": "beginner" | "intermediate" | "advanced",
+      "context": string,     // one topical tag: "Technical", "Business", "Writing", or "General"
+      "def": string,         // a clear, concise definition
+      "example": string,     // one natural example sentence for a tech/office professional
+      "synonyms": string[],  // 3-4 synonyms or close alternatives
+      "phonetic": string     // IPA transcription, e.g. /dɪˈplɔɪmənt/ — include the slashes
+    }
+  ]
+}
+
+Provide exactly one card per input word, in the same order. If a word/phrase is not a real, useful vocabulary item (e.g. a meaningless word pair), omit it from "cards" instead of inventing a definition.`;
+}
+
+/** Retries a transient AI call once before giving up, so a single flaky response doesn't surface as a user-facing failure. */
+async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch {
+    return fn();
+  }
+}
+
 function buildQuizPrompt(input: GenerateQuizInput): string {
   const count = input.count ?? 5;
   const vocab = input.vocab?.length
@@ -176,19 +210,46 @@ export function createGeminiProvider(): AiProvider {
     },
 
     async generateFlashcard(input: GenerateFlashcardInput) {
-      const response = await ai.models.generateContent({
-        model: MODEL,
-        contents: buildFlashcardPrompt(input),
-        config: { responseMimeType: "application/json", temperature: 0.3 },
+      return withRetry(async () => {
+        const response = await ai.models.generateContent({
+          model: MODEL,
+          contents: buildFlashcardPrompt(input),
+          config: { responseMimeType: "application/json", temperature: 0.3 },
+        });
+        const raw = response.text ?? "";
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(stripFences(raw));
+        } catch {
+          throw new Error("AI returned a non-JSON response");
+        }
+        return generatedFlashcardSchema.parse(parsed);
       });
-      const raw = response.text ?? "";
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(stripFences(raw));
-      } catch {
-        throw new Error("AI returned a non-JSON response");
-      }
-      return generatedFlashcardSchema.parse(parsed);
+    },
+
+    async generateFlashcards(words: string[]) {
+      if (words.length === 0) return [];
+      return withRetry(async () => {
+        const response = await ai.models.generateContent({
+          model: MODEL,
+          contents: buildFlashcardBatchPrompt(words),
+          config: { responseMimeType: "application/json", temperature: 0.3 },
+        });
+        const raw = response.text ?? "";
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(stripFences(raw));
+        } catch {
+          throw new Error("AI returned a non-JSON response");
+        }
+        const batch = generatedFlashcardBatchSchema.parse(parsed);
+        const cards: GeneratedFlashcard[] = [];
+        for (const item of batch.cards) {
+          const result = generatedFlashcardSchema.safeParse(item);
+          if (result.success) cards.push(result.data);
+        }
+        return cards;
+      });
     },
 
     async generateQuiz(input: GenerateQuizInput) {
