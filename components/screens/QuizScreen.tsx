@@ -297,7 +297,7 @@ export function QuizScreen({
                   style={{
                     background: "var(--surface)",
                     borderRadius: "var(--r4)",
-                    border: `1.5px solid ${ans.correct ? "var(--green-l)" : "var(--red-ll)"}`,
+                    border: `1.5px solid ${ans.correct ? "var(--green-ll)" : "var(--red-ll)"}`,
                     padding: "14px 16px",
                   }}
                 >
