@@ -118,9 +118,21 @@ Return ONLY a JSON object (no markdown) with this exact shape:
 Provide exactly one card per input word, in the same order. If a word/phrase is not a real, useful vocabulary item (e.g. a meaningless word pair), omit it from "cards" instead of inventing a definition.`;
 }
 
-function isRetryableAiError(err: unknown): boolean {
+/** Gemini is temporarily overloaded (503) — safe to retry, usually resolves in seconds. */
+export function isAiOverloaded(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
-  return /"code":\s*(503|429)|UNAVAILABLE|RESOURCE_EXHAUSTED/i.test(msg);
+  return /"code":\s*503|UNAVAILABLE/i.test(msg);
+}
+
+/**
+ * The project has exhausted its Gemini quota (429 RESOURCE_EXHAUSTED — e.g.
+ * the free tier's 20 requests/day/model cap). This is NOT transient within
+ * the request lifecycle: retrying immediately just spends another unit of
+ * the same exhausted quota, so callers must NOT retry this one.
+ */
+export function isAiQuotaExhausted(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /"code":\s*429|RESOURCE_EXHAUSTED/i.test(msg);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -128,23 +140,27 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Retries a transient AI call before giving up. Gemini's 503 "high demand"
- * responses are common and self-resolve within seconds, so those get two
- * extra attempts with backoff; other errors (bad JSON, schema mismatch) get
- * a single immediate retry since they're less likely to be load-related.
+ * Retries a transient AI call before giving up. Only 503 "high demand"
+ * responses get extra attempts with backoff (they self-resolve within
+ * seconds); quota exhaustion (429) fails fast since retrying only burns
+ * more of the same exhausted quota, and other errors (bad JSON, schema
+ * mismatch) get a single immediate retry since they're less likely to be
+ * load-related.
  */
 async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   const delays = [0, 500, 1500];
   let lastErr: unknown;
   for (let attempt = 0; attempt < delays.length; attempt++) {
     if (attempt > 0) {
-      if (attempt > 1 && !isRetryableAiError(lastErr)) break;
+      if (isAiQuotaExhausted(lastErr)) break;
+      if (attempt > 1 && !isAiOverloaded(lastErr)) break;
       await sleep(delays[attempt]);
     }
     try {
       return await fn();
     } catch (err) {
       lastErr = err;
+      if (isAiQuotaExhausted(err)) break;
     }
   }
   throw lastErr;
