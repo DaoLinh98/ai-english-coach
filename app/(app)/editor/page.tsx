@@ -570,7 +570,7 @@ export default function EditorPage() {
             left: "50%",
             transform: "translateX(-50%)",
             background: "var(--t1)",
-            color: "#fff",
+            color: "var(--bg)",
             padding: "10px 20px",
             borderRadius: "var(--rmax)",
             fontSize: 13,
