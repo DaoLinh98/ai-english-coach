@@ -118,13 +118,36 @@ Return ONLY a JSON object (no markdown) with this exact shape:
 Provide exactly one card per input word, in the same order. If a word/phrase is not a real, useful vocabulary item (e.g. a meaningless word pair), omit it from "cards" instead of inventing a definition.`;
 }
 
-/** Retries a transient AI call once before giving up, so a single flaky response doesn't surface as a user-facing failure. */
+function isRetryableAiError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /"code":\s*(503|429)|UNAVAILABLE|RESOURCE_EXHAUSTED/i.test(msg);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Retries a transient AI call before giving up. Gemini's 503 "high demand"
+ * responses are common and self-resolve within seconds, so those get two
+ * extra attempts with backoff; other errors (bad JSON, schema mismatch) get
+ * a single immediate retry since they're less likely to be load-related.
+ */
 async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
-  try {
-    return await fn();
-  } catch {
-    return fn();
+  const delays = [0, 500, 1500];
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < delays.length; attempt++) {
+    if (attempt > 0) {
+      if (attempt > 1 && !isRetryableAiError(lastErr)) break;
+      await sleep(delays[attempt]);
+    }
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+    }
   }
+  throw lastErr;
 }
 
 function buildQuizPrompt(input: GenerateQuizInput): string {

@@ -108,8 +108,15 @@ export async function addFlashcardDirect(
   } else {
     try {
       card = await getAiProvider().generateFlashcard({ word: w });
-    } catch {
-      return { success: false, message: "AI generation failed — please try again" };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const busy = /"code":\s*(503|429)|UNAVAILABLE|RESOURCE_EXHAUSTED/i.test(msg);
+      return {
+        success: false,
+        message: busy
+          ? "AI is busy right now — please try again in a moment"
+          : "AI generation failed — please try again",
+      };
     }
   }
 
