@@ -145,7 +145,7 @@ function TypingCardView({
       </div>
 
       {maskedExample && (
-        <div style={{ background: "rgba(245,158,11,.08)", borderRadius: "var(--r3)", padding: "12px 14px" }}>
+        <div style={{ background: "color-mix(in srgb, var(--amber) 8%, transparent)", borderRadius: "var(--r3)", padding: "12px 14px" }}>
           <p style={{ fontSize: 11, fontWeight: 700, color: "var(--amber-d)", marginBottom: 5, textTransform: "uppercase", letterSpacing: ".5px" }}>
             Example
           </p>
@@ -188,7 +188,7 @@ function TypingCardView({
               gap: 10,
               padding: "10px 14px",
               borderRadius: "var(--r3)",
-              background: isCorrect ? "var(--green-l)" : "rgba(239,68,68,.08)",
+              background: isCorrect ? "var(--green-l)" : "color-mix(in srgb, var(--red) 8%, transparent)",
             }}
           >
             <Icon name={isCorrect ? "check" : "x"} size={16} color={isCorrect ? "var(--green)" : "var(--red)"} />
@@ -383,7 +383,7 @@ function FlashCardView({
             <p style={{ fontSize: 16, fontWeight: 600, color: "var(--t1)", lineHeight: 1.55 }}>{card.def}</p>
           </div>
           {card.example && (
-            <div style={{ background: "rgba(245,158,11,.08)", borderRadius: "var(--r3)", padding: "12px 14px" }}>
+            <div style={{ background: "color-mix(in srgb, var(--amber) 8%, transparent)", borderRadius: "var(--r3)", padding: "12px 14px" }}>
               <p style={{ fontSize: 11, fontWeight: 700, color: "var(--amber-d)", marginBottom: 5, textTransform: "uppercase", letterSpacing: ".5px" }}>
                 Example
               </p>
