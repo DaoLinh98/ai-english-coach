@@ -313,7 +313,7 @@ export function DashboardScreen({ data }: { data: DashboardData }) {
             marginBottom: 28,
             overflow: "hidden",
             position: "relative",
-            background: "linear-gradient(135deg, #F59E0B 0%, #FB923C 55%, #F97316 100%)",
+            background: "linear-gradient(135deg, var(--amber) 0%, var(--orange) 55%, var(--orange-d) 100%)",
             padding: "28px 32px",
             display: "flex",
             alignItems: "center",
