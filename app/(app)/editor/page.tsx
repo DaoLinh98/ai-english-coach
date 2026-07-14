@@ -207,6 +207,16 @@ export default function EditorPage() {
     try { sessionStorage.removeItem(SESSION_KEY); } catch {}
   }
 
+  React.useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Escape" || mode === "loading") return;
+      setInputText("");
+      handleReset();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mode]);
+
   function handleCopy() {
     navigator.clipboard.writeText(translatedText).catch(() => {});
     setCopyDone(true);
