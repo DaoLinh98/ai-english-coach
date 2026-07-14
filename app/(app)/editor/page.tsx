@@ -85,6 +85,7 @@ export default function EditorPage() {
   const [explanationsLoading, setExplanationsLoading] = React.useState(false);
   const [expandedExplanation, setExpandedExplanation] = React.useState<number | null>(null);
   const [resultView, setResultView] = React.useState<ResultView>("inline");
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
   React.useEffect(() => {
     const h = () => setNarrow(window.innerWidth < 960);
@@ -217,6 +218,10 @@ export default function EditorPage() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [mode]);
 
+  React.useEffect(() => {
+    if (mode === "input") textareaRef.current?.focus();
+  }, [mode]);
+
   function handleCopy() {
     navigator.clipboard.writeText(translatedText).catch(() => {});
     setCopyDone(true);
@@ -297,6 +302,7 @@ export default function EditorPage() {
           {(mode === "input" || mode === "loading") && (
             <div className="a-up" style={{ height: "100%", display: "flex", flexDirection: "column", gap: 16 }}>
               <textarea
+                ref={textareaRef}
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 spellCheck={false}
