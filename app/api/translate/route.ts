@@ -1,23 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
+import { buildTranslateToEnglishPrompt } from "@/lib/ai/prompts";
+import { ollamaStreamText } from "@/lib/ai/ollama";
 
 const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
-
-function buildTranslationPrompt(text: string): string {
-  return `You are an expert English editor working with software developers.
-
-The user has written text that may be a mix of Vietnamese and English. Your tasks:
-1. Translate any Vietnamese portions into English
-2. Fix all grammar, spelling, punctuation, and sentence structure
-3. Use concise, tech-oriented professional English — direct, on-point, no filler words
-4. Preserve technical terms (API, PR, deploy, refactor, etc.) exactly as written
-
-Return ONLY the corrected English text. No explanation, no commentary — just the final text.
-
-TEXT:
-"""
-${text}
-"""`;
-}
 
 export async function POST(req: Request) {
   try {
@@ -28,30 +13,38 @@ export async function POST(req: Request) {
       return new Response("Missing text", { status: 400 });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
+    const prompt = buildTranslateToEnglishPrompt(text);
+    const useOllama = process.env.AI_PROVIDER === "ollama";
+
+    if (!useOllama && !process.env.GEMINI_API_KEY) {
       return new Response("API key not configured", { status: 500 });
     }
 
-    const ai = new GoogleGenAI({ apiKey });
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          const genStream = await ai.models.generateContentStream({
-            model: MODEL,
-            contents: buildTranslationPrompt(text),
-            config: {
-              temperature: 0.1,
-              thinkingConfig: { thinkingBudget: 0 },
-            },
-          });
-
-          for await (const chunk of genStream) {
-            const part = chunk.text;
-            if (part) {
+          if (useOllama) {
+            for await (const part of ollamaStreamText(prompt, 0.1)) {
               controller.enqueue(encoder.encode(part));
+            }
+          } else {
+            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+            const genStream = await ai.models.generateContentStream({
+              model: MODEL,
+              contents: prompt,
+              config: {
+                temperature: 0.1,
+                thinkingConfig: { thinkingBudget: 0 },
+              },
+            });
+
+            for await (const chunk of genStream) {
+              const part = chunk.text;
+              if (part) {
+                controller.enqueue(encoder.encode(part));
+              }
             }
           }
           controller.close();
