@@ -268,7 +268,7 @@ export default function EditorPage() {
           </div>
           <div>
             <p style={{ fontWeight: 700, fontSize: 15, color: "var(--t1)", lineHeight: 1.2 }}>Translate &amp; Fix</p>
-            <p style={{ fontSize: 11, color: "var(--t3)" }}>
+            <p style={{ fontSize: 12, color: "var(--t3)" }}>
               <span style={{ color: "var(--red)" }}>Paste mixed text</span> — <span style={{ color: "var(--green)" }}>Get fluent English</span>
             </p>
           </div>
