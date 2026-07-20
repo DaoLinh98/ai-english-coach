@@ -306,7 +306,7 @@ export default function EditorPage() {
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 spellCheck={false}
-                placeholder="Paste or type your text here… (tiếng Việt or English or cả hai đều được)"
+                placeholder="Paste or type your text here..."
                 disabled={mode === "loading"}
                 style={{
                   flex: 1,
