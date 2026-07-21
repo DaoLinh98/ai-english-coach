@@ -415,8 +415,8 @@ export function DashboardScreen({ data }: { data: DashboardData }) {
               <div style={{ background: "var(--amber-ll)", borderRadius: "var(--r3)", padding: "12px 14px", display: "flex", gap: 10, alignItems: "flex-start" }}>
                 <Icon name="sparkles" size={16} color="var(--amber-d)" style={{ marginTop: 2, flexShrink: 0 }} />
                 <div>
-                  <p style={{ fontSize: 12, fontWeight: 700, color: "var(--amber-dd)" }}>Pro Tip</p>
-                  <p style={{ fontSize: 11, color: "var(--amber-d)", marginTop: 2, lineHeight: 1.5 }}>Paste your text and let AI suggest improvements in seconds.</p>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: "var(--red)" }}>Pro Tip</p>
+                  <p style={{ fontSize: 11, color: "var(--red)", marginTop: 2, lineHeight: 1.5 }}>Paste your text and let AI suggest improvements in seconds.</p>
                 </div>
               </div>
             </div>
