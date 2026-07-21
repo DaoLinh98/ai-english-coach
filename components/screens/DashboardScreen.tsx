@@ -273,7 +273,7 @@ export function DashboardScreen({ data }: { data: DashboardData }) {
             <h1 style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-.5px", color: "var(--t1)", lineHeight: 1.2 }}>
               {greeting}, {data.name}
             </h1>
-            <p style={{ color: "var(--t3)", fontSize: 14, marginTop: 4 }}>
+            <p style={{ color: "var(--green)", fontSize: 14, marginTop: 4 }}>
               {data.weeklyWords > 0 ? (
                 <>
                   You&apos;ve improved <strong style={{ color: "var(--amber-d)" }}>{data.weeklyWords} words</strong> this week. Keep the momentum!
