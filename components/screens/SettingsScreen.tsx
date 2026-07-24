@@ -306,7 +306,7 @@ export function SettingsScreen({
                   </div>
                 </div>
                 <SettingRow
-                  label="Full Name"
+                  label="Name"
                   sub="Used for personalized greetings"
                   control={
                     <input
