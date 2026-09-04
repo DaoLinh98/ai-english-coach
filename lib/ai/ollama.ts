@@ -26,6 +26,21 @@ const BASE_URL = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
 const MODEL = process.env.OLLAMA_MODEL || "translategemma:12b";
 
 /**
+ * Keep the model resident between requests. Ollama unloads after 5 minutes
+ * idle by default, and reloading a 12B model from disk costs several seconds
+ * that land on whichever user happens to submit first after a lull.
+ */
+const KEEP_ALIVE = "30m";
+
+/**
+ * Ceilings on generated tokens. Generation is the slowest part of a request,
+ * so an unbounded response is an unbounded wait; these are set well above
+ * what a well-behaved answer needs and exist only to cap the worst case.
+ */
+const MAX_TOKENS_TEXT = 1024;
+const MAX_TOKENS_JSON = 2048;
+
+/**
  * Ollama has no built-in auth. When it's reached through a public tunnel
  * (ngrok, Cloudflare Tunnel) rather than plain localhost, set
  * OLLAMA_AUTH_HEADER to the exact `Authorization` header value the tunnel
@@ -49,20 +64,24 @@ function ollamaHeaders(): Record<string, string> {
 export async function ollamaChatJson(
   prompt: string,
   temperature: number,
+  signal?: AbortSignal,
 ): Promise<string> {
   const res = await fetch(`${BASE_URL}/api/chat`, {
     method: "POST",
     headers: ollamaHeaders(),
+    signal,
     body: JSON.stringify({
       model: MODEL,
       messages: [{ role: "user", content: prompt }],
       stream: false,
       format: "json",
-      // qwen3 is a hybrid reasoning model; its <think> pass adds real
-      // latency and isn't needed for structured extraction/correction —
-      // the prompt already spells out the exact rules to apply.
+      // Suppress any chain-of-thought pass: it adds real latency and isn't
+      // needed for structured extraction/correction — the prompt already
+      // spells out the exact rules to apply. Accepted (and ignored) by
+      // models that have no reasoning mode.
       think: false,
-      options: { temperature },
+      keep_alive: KEEP_ALIVE,
+      options: { temperature, num_predict: MAX_TOKENS_JSON },
     }),
   });
   if (!res.ok) {
@@ -128,18 +147,24 @@ export function createOllamaProvider(): AiProvider {
 export async function* ollamaStreamText(
   prompt: string,
   temperature: number,
+  signal?: AbortSignal,
 ): AsyncGenerator<string> {
   const res = await fetch(`${BASE_URL}/api/chat`, {
     method: "POST",
     headers: ollamaHeaders(),
+    // Pass the caller's signal through so that a client disconnect actually
+    // stops generation. Without it Ollama keeps producing tokens for a
+    // response nobody will read, holding the CPU against the next request.
+    signal,
     body: JSON.stringify({
       model: MODEL,
       messages: [{ role: "user", content: prompt }],
       stream: true,
-      // See ollamaChatJson: skip qwen3's reasoning pass so translated
-      // text starts streaming immediately instead of after a think block.
+      // See ollamaChatJson: skip any reasoning pass so translated text
+      // starts streaming immediately instead of after a think block.
       think: false,
-      options: { temperature },
+      keep_alive: KEEP_ALIVE,
+      options: { temperature, num_predict: MAX_TOKENS_TEXT },
     }),
   });
   if (!res.ok || !res.body) {

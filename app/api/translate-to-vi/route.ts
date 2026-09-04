@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          for await (const part of ollamaStreamText(prompt, 0.1)) {
+          for await (const part of ollamaStreamText(prompt, 0.1, req.signal)) {
             controller.enqueue(encoder.encode(part));
           }
           controller.close();

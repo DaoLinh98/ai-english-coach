@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     }
 
     const prompt = buildChangeExplanationPrompt(original, corrected);
-    const raw = await ollamaChatJson(prompt, 0.2);
+    const raw = await ollamaChatJson(prompt, 0.2, req.signal);
 
     let parsed: unknown;
     try {

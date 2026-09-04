@@ -133,15 +133,29 @@ export default function EditorPage() {
         body: JSON.stringify({ text }),
       });
 
-      if (!res.ok) {
+      if (!res.ok || !res.body) {
         setMode("input");
         showToast("Translation failed — please try again.");
         return;
       }
 
-      const full = await res.text();
-      setTranslatedText(full);
+      // Switch to the result view before reading the body so the translation
+      // appears token by token as the model produces it. Buffering the whole
+      // response first (res.text()) would hold the spinner for the entire
+      // generation even though the route streams.
       setMode("result");
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let full = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        full += decoder.decode(value, { stream: true });
+        setTranslatedText(full);
+      }
+      full += decoder.decode();
+      setTranslatedText(full);
       setVocabSuggestions(extractVocab(full));
     } catch {
       setMode("input");

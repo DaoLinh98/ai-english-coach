@@ -210,9 +210,9 @@ The user has written text that may be a mix of Vietnamese and English. Your task
 Return ONLY the corrected English text. No explanation, no commentary, no <think> content — just the final text.
 
 TEXT:
-"""
+
 ${text}
-"""`;
+`;
 }
 
 const TRANSLATE_SOURCE_GUIDE: Record<string, string> = {
@@ -239,9 +239,9 @@ Rules:
 - Return ONLY the Vietnamese translation. No explanation, no original text, no commentary, no <think> content.
 
 ENGLISH TEXT:
-"""
+
 ${text}
-"""`;
+`;
 }
 
 export function stripFences(raw: string): string {
