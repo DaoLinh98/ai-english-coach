@@ -306,8 +306,8 @@ export default function EditorPage() {
             <div className="a-up" style={{ height: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
               {resultView === "inline" ? (
                 <>
-                  {/* Original (collapsed) */}
-                  <details style={{ flexShrink: 0 }}>
+                  {/* Original (expanded by default) */}
+                  <details open style={{ flexShrink: 0 }}>
                     <summary style={{ fontSize: 12, fontWeight: 600, color: "var(--t3)", cursor: "pointer", userSelect: "none", padding: "4px 0" }}>
                       Original text
                     </summary>
