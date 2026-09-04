@@ -1,5 +1,5 @@
 import { getSessionUser } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
 import { computeStreak, hasActivityToday } from "@/lib/streak";
 import { SignInPrompt } from "@/components/SignInPrompt";
 import {
@@ -15,24 +15,40 @@ export default async function FlashcardsPage() {
   let cards: Flashcard[] = [];
   let reviewDates: string[] = [];
   try {
-    const supabase = await createClient();
-    const { data } = await supabase
-      .from("flashcards")
-      .select("*")
-      .eq("user_id", session.id)
-      .order("created_at", { ascending: false });
-    const raw = (data ?? []) as Array<Record<string, unknown>>;
+    const raw = await prisma.flashcard.findMany({
+      where: { userId: session.id },
+      orderBy: { createdAt: "desc" },
+      take: 300,
+    });
     cards = raw.map((c) => ({
-      ...c,
-      dueDate: (c.due_date as string) ?? new Date().toLocaleDateString("en-CA"),
-      reviewCount: (c.review_count as number) ?? 0,
-      tag: (c.tag as string | null) ?? null,
-    })) as Flashcard[];
+      id: c.id,
+      word: c.word,
+      pos: c.pos,
+      level: c.level,
+      context: c.context,
+      tag: c.tag,
+      def: c.def,
+      example: c.example,
+      synonyms: c.synonyms,
+      learned: c.learned,
+      phonetic: c.phonetic,
+      dueDate: c.dueDate.toISOString().slice(0, 10),
+      reviewCount: c.reviewCount,
+      created_at: c.createdAt.toISOString(),
+      updated_at: c.updatedAt.toISOString(),
+    }));
+
+    // Streak needs the full review history, not just the latest 300 cards,
+    // so it's a separate lightweight (2-column) query rather than reusing `raw`.
+    const history = await prisma.flashcard.findMany({
+      where: { userId: session.id },
+      select: { createdAt: true, updatedAt: true },
+    });
     // A card was actually reviewed (not just created) when updated_at moved
     // past created_at — reviewFlashcard() is the only thing that bumps it.
-    reviewDates = raw
-      .filter((c) => new Date(c.updated_at as string).getTime() > new Date(c.created_at as string).getTime())
-      .map((c) => c.updated_at as string);
+    reviewDates = history
+      .filter((c) => c.updatedAt.getTime() > c.createdAt.getTime())
+      .map((c) => c.updatedAt.toISOString());
   } catch {
     cards = [];
   }

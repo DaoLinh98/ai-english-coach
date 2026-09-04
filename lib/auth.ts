@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
 
 export type Profile = {
   user_id: string;
@@ -30,12 +31,18 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 
   let profile: Profile | null = null;
   try {
-    const { data } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("user_id", user.id)
-      .single();
-    profile = (data as Profile) ?? null;
+    const row = await prisma.profile.findUnique({ where: { userId: user.id } });
+    profile = row
+      ? {
+          user_id: row.userId,
+          name: row.name,
+          level: row.level,
+          preferred_style: row.preferredStyle,
+          learning_goals: row.learningGoals,
+          weekly_goal: row.weeklyGoal,
+          prefs: row.prefs as Record<string, unknown>,
+        }
+      : null;
   } catch {
     profile = null;
   }

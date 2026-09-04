@@ -1,5 +1,5 @@
 import { getSessionUser } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
 import { SettingsScreen } from "@/components/screens/SettingsScreen";
 import { SignInPrompt } from "@/components/SignInPrompt";
 import { updateProfile, addVocab, removeVocab, requestPasswordReset } from "./actions";
@@ -43,33 +43,33 @@ export default async function SettingsPage() {
   let accuracy: number | null = null;
 
   try {
-    const supabase = await createClient();
+    const vocabData = await prisma.preferredVocabulary.findMany({
+      where: { userId: session.id },
+      select: { term: true },
+      orderBy: { createdAt: "asc" },
+    });
+    vocab = vocabData.map((v) => v.term);
 
-    const { data: vocabData } = await supabase
-      .from("preferred_vocabulary")
-      .select("term")
-      .eq("user_id", session.id)
-      .order("created_at", { ascending: true });
-    vocab = (vocabData ?? []).map((v: { term: string }) => v.term);
-
-    const { data: hist } = await supabase
-      .from("correction_history")
-      .select("created_at,output_text")
-      .eq("user_id", session.id)
-      .order("created_at", { ascending: false })
-      .limit(200);
-    const histories = (hist ?? []) as HistoryRow[];
+    const hist = await prisma.correctionHistory.findMany({
+      where: { userId: session.id },
+      select: { createdAt: true, outputText: true },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+    const histories: HistoryRow[] = hist.map((h) => ({
+      created_at: h.createdAt.toISOString(),
+      output_text: h.outputText,
+    }));
     totalWords = histories.reduce((s, h) => s + wordCount(h.output_text), 0);
     streak = computeStreak(histories);
 
-    const { data: attempts } = await supabase
-      .from("quiz_attempts")
-      .select("score,total")
-      .eq("user_id", session.id);
-    const rows = (attempts ?? []) as { score: number; total: number }[];
-    if (rows.length) {
-      const score = rows.reduce((s, r) => s + r.score, 0);
-      const total = rows.reduce((s, r) => s + r.total, 0);
+    const attempts = await prisma.quizAttempt.findMany({
+      where: { userId: session.id },
+      select: { score: true, total: true },
+    });
+    if (attempts.length) {
+      const score = attempts.reduce((s, r) => s + r.score, 0);
+      const total = attempts.reduce((s, r) => s + r.total, 0);
       accuracy = total > 0 ? Math.round((score / total) * 100) : null;
     }
   } catch {

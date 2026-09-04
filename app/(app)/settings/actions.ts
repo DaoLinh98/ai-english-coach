@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -22,36 +24,48 @@ export type ProfilePatch = {
 };
 
 export async function updateProfile(patch: ProfilePatch) {
-  const { supabase, user } = await requireUser();
-  const { error } = await supabase.from("profiles").upsert(
-    {
-      user_id: user.id,
-      ...patch,
-      updated_at: new Date().toISOString(),
+  const { user } = await requireUser();
+  await prisma.profile.upsert({
+    where: { userId: user.id },
+    create: {
+      userId: user.id,
+      name: patch.name,
+      level: patch.level,
+      preferredStyle: patch.preferred_style,
+      learningGoals: patch.learning_goals,
+      weeklyGoal: patch.weekly_goal,
+      prefs: patch.prefs as Prisma.InputJsonValue | undefined,
     },
-    { onConflict: "user_id" },
-  );
-  if (error) throw new Error(error.message);
+    update: {
+      name: patch.name,
+      level: patch.level,
+      preferredStyle: patch.preferred_style,
+      learningGoals: patch.learning_goals,
+      weeklyGoal: patch.weekly_goal,
+      prefs: patch.prefs as Prisma.InputJsonValue | undefined,
+      updatedAt: new Date(),
+    },
+  });
   revalidatePath("/settings");
 }
 
 export async function addVocab(term: string) {
   const t = term.trim();
   if (!t) return;
-  const { supabase, user } = await requireUser();
-  await supabase
-    .from("preferred_vocabulary")
-    .upsert({ user_id: user.id, term: t }, { onConflict: "user_id,term" });
+  const { user } = await requireUser();
+  await prisma.preferredVocabulary.upsert({
+    where: { userId_term: { userId: user.id, term: t } },
+    create: { userId: user.id, term: t },
+    update: {},
+  });
   revalidatePath("/settings");
 }
 
 export async function removeVocab(term: string) {
-  const { supabase, user } = await requireUser();
-  await supabase
-    .from("preferred_vocabulary")
-    .delete()
-    .eq("user_id", user.id)
-    .eq("term", term);
+  const { user } = await requireUser();
+  await prisma.preferredVocabulary.deleteMany({
+    where: { userId: user.id, term },
+  });
   revalidatePath("/settings");
 }
 

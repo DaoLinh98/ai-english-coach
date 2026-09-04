@@ -23,7 +23,7 @@ import type {
 } from "./provider";
 
 const BASE_URL = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
-const MODEL = process.env.OLLAMA_MODEL || "qwen3:4b-instruct";
+const MODEL = process.env.OLLAMA_MODEL || "translategemma:12b";
 
 /**
  * Ollama has no built-in auth. When it's reached through a public tunnel
@@ -46,7 +46,10 @@ function ollamaHeaders(): Record<string, string> {
 }
 
 /** One-shot, non-streaming chat call constrained to JSON output via Ollama's `format: "json"`. */
-export async function ollamaChatJson(prompt: string, temperature: number): Promise<string> {
+export async function ollamaChatJson(
+  prompt: string,
+  temperature: number,
+): Promise<string> {
   const res = await fetch(`${BASE_URL}/api/chat`, {
     method: "POST",
     headers: ollamaHeaders(),
@@ -55,11 +58,17 @@ export async function ollamaChatJson(prompt: string, temperature: number): Promi
       messages: [{ role: "user", content: prompt }],
       stream: false,
       format: "json",
+      // qwen3 is a hybrid reasoning model; its <think> pass adds real
+      // latency and isn't needed for structured extraction/correction —
+      // the prompt already spells out the exact rules to apply.
+      think: false,
       options: { temperature },
     }),
   });
   if (!res.ok) {
-    throw new Error(`Ollama request failed (${res.status}): ${await res.text()}`);
+    throw new Error(
+      `Ollama request failed (${res.status}): ${await res.text()}`,
+    );
   }
   const data = (await res.json()) as { message?: { content?: string } };
   return data.message?.content ?? "";
@@ -73,7 +82,7 @@ function parseJson(raw: string): unknown {
   }
 }
 
-/** Local Ollama server as an AiProvider — same prompts/schemas as Gemini, swapped transport. */
+/** Local Ollama server as an AiProvider. */
 export function createOllamaProvider(): AiProvider {
   return {
     async correctText(input: CorrectTextInput) {
@@ -127,11 +136,16 @@ export async function* ollamaStreamText(
       model: MODEL,
       messages: [{ role: "user", content: prompt }],
       stream: true,
+      // See ollamaChatJson: skip qwen3's reasoning pass so translated
+      // text starts streaming immediately instead of after a think block.
+      think: false,
       options: { temperature },
     }),
   });
   if (!res.ok || !res.body) {
-    throw new Error(`Ollama request failed (${res.status}): ${await res.text()}`);
+    throw new Error(
+      `Ollama request failed (${res.status}): ${await res.text()}`,
+    );
   }
 
   const reader = res.body.getReader();

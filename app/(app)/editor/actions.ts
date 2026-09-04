@@ -8,6 +8,7 @@ import type {
   CorrectTone,
 } from "@/lib/ai";
 import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
 
 export type AnalyzeInput = {
   text: string;
@@ -18,7 +19,7 @@ export type AnalyzeInput = {
 
 /**
  * Server Action: run the AI correction engine over the user's text.
- * Runs server-side only (the Gemini key never reaches the client).
+ * Runs server-side only (the AI provider is never reached from the client).
  *
  * When the user is signed in, their preferred vocabulary is fed to the model
  * and the result is persisted to correction_history + correction_items
@@ -38,11 +39,11 @@ export async function analyzeText(
   let preferredVocab: string[] | undefined;
   if (user) {
     try {
-      const { data } = await supabase
-        .from("preferred_vocabulary")
-        .select("term")
-        .eq("user_id", user.id);
-      preferredVocab = (data ?? []).map((v: { term: string }) => v.term);
+      const data = await prisma.preferredVocabulary.findMany({
+        where: { userId: user.id },
+        select: { term: true },
+      });
+      preferredVocab = data.map((v) => v.term);
     } catch {
       preferredVocab = undefined;
     }
@@ -59,23 +60,22 @@ export async function analyzeText(
 
   if (user) {
     try {
-      const { data: hist } = await supabase
-        .from("correction_history")
-        .insert({
-          user_id: user.id,
+      const hist = await prisma.correctionHistory.create({
+        data: {
+          userId: user.id,
           context: input.context,
           tone: input.tone,
           level: input.level,
-          input_text: text,
-          output_text: result.correctedText,
-        })
-        .select("id")
-        .single();
+          inputText: text,
+          outputText: result.correctedText,
+        },
+        select: { id: true },
+      });
 
-      if (hist && result.items.length) {
-        await supabase.from("correction_items").insert(
-          result.items.map((it) => ({
-            history_id: hist.id,
+      if (result.items.length) {
+        await prisma.correctionItem.createMany({
+          data: result.items.map((it) => ({
+            historyId: hist.id,
             type: it.type,
             find: it.find,
             suggest: it.suggest,
@@ -83,7 +83,7 @@ export async function analyzeText(
             expl: it.expl,
             rule: it.rule,
           })),
-        );
+        });
       }
     } catch {
       // best-effort persistence

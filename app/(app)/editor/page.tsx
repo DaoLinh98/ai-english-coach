@@ -7,17 +7,17 @@ import type { ChangeExplanation, GeneratedFlashcard } from "@/lib/ai/schema";
 import { speak } from "@/lib/tts";
 
 const STOP_WORDS = new Set([
-  "the","and","that","have","this","with","from","they","will","been","their",
-  "what","when","make","like","time","just","into","than","then","some","could",
-  "other","would","there","more","also","about","which","after","before","because",
-  "should","between","through","during","always","often","never","every","without",
-  "however","although","therefore","furthermore","additionally","nevertheless",
-  "information","available","different","important","following","including",
-  "another","already","whether","together","something","everything","anything",
-  "someone","anyone","everyone","nothing","within","across","against","around",
-  "these","those","where","while","since","still","being","having","doing",
-  "working","getting","making","using","taking","giving","going","coming","looking",
-  "please","thank","regards","sincerely","attached","ensure","provide",
+  "the", "and", "that", "have", "this", "with", "from", "they", "will", "been", "their",
+  "what", "when", "make", "like", "time", "just", "into", "than", "then", "some", "could",
+  "other", "would", "there", "more", "also", "about", "which", "after", "before", "because",
+  "should", "between", "through", "during", "always", "often", "never", "every", "without",
+  "however", "although", "therefore", "furthermore", "additionally", "nevertheless",
+  "information", "available", "different", "important", "following", "including",
+  "another", "already", "whether", "together", "something", "everything", "anything",
+  "someone", "anyone", "everyone", "nothing", "within", "across", "against", "around",
+  "these", "those", "where", "while", "since", "still", "being", "having", "doing",
+  "working", "getting", "making", "using", "taking", "giving", "going", "coming", "looking",
+  "please", "thank", "regards", "sincerely", "attached", "ensure", "provide",
 ]);
 
 type Mode = "input" | "loading" | "result";
@@ -45,35 +45,27 @@ function loadSession(): Partial<EditorState> {
   try {
     const raw = sessionStorage.getItem(SESSION_KEY);
     if (raw) return JSON.parse(raw) as Partial<EditorState>;
-  } catch {}
+  } catch { }
   return {};
 }
 
 function saveSession(state: EditorState) {
   try {
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(state));
-  } catch {}
+  } catch { }
 }
 
 
 export default function EditorPage() {
-  const [inputText, setInputText] = React.useState<string>(() => {
-    const saved = loadSession();
-    return saved.inputText ?? "";
-  });
-  const [translatedText, setTranslatedText] = React.useState<string>(() => {
-    const saved = loadSession();
-    return saved.translatedText ?? "";
-  });
-  const [mode, setMode] = React.useState<Mode>(() => {
-    const saved = loadSession();
-    const m = saved.mode;
-    return m && m !== "loading" ? m : "input";
-  });
-  const [vocabSuggestions, setVocabSuggestions] = React.useState<string[]>(() => {
-    const saved = loadSession();
-    return saved.translatedText ? extractVocab(saved.translatedText) : [];
-  });
+  // Deterministic defaults on both server and client so SSR markup matches
+  // the pre-hydration client render; sessionStorage is only read after
+  // mount (see the hydrate effect below), since it doesn't exist on the
+  // server and reading it in a useState initializer causes a hydration
+  // mismatch whenever a previous session left `mode: "result"` saved.
+  const [inputText, setInputText] = React.useState<string>("");
+  const [translatedText, setTranslatedText] = React.useState<string>("");
+  const [mode, setMode] = React.useState<Mode>("input");
+  const [vocabSuggestions, setVocabSuggestions] = React.useState<string[]>([]);
   const [addedWords, setAddedWords] = React.useState<Set<string>>(new Set());
   const [addingWords, setAddingWords] = React.useState<Set<string>>(new Set());
   const [vocabDrafts, setVocabDrafts] = React.useState<Record<string, GeneratedFlashcard>>({});
@@ -85,6 +77,7 @@ export default function EditorPage() {
   const [explanationsLoading, setExplanationsLoading] = React.useState(false);
   const [expandedExplanation, setExpandedExplanation] = React.useState<number | null>(null);
   const [resultView, setResultView] = React.useState<ResultView>("inline");
+  const [hydrated, setHydrated] = React.useState(false);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
   React.useEffect(() => {
@@ -94,10 +87,26 @@ export default function EditorPage() {
     return () => window.removeEventListener("resize", h);
   }, []);
 
-  // Persist session on change
+  // Restore any saved session client-side, after mount — reading
+  // sessionStorage during render (e.g. in a useState initializer) would
+  // desync the SSR and hydration trees.
   React.useEffect(() => {
+    const saved = loadSession();
+    if (saved.inputText) setInputText(saved.inputText);
+    if (saved.translatedText) {
+      setTranslatedText(saved.translatedText);
+      setVocabSuggestions(extractVocab(saved.translatedText));
+    }
+    if (saved.mode && saved.mode !== "loading") setMode(saved.mode);
+    setHydrated(true);
+  }, []);
+
+  // Persist session on change (skipped until the restore above has run, so
+  // it doesn't overwrite the saved session with the pre-hydration defaults).
+  React.useEffect(() => {
+    if (!hydrated) return;
     saveSession({ inputText, translatedText, mode });
-  }, [inputText, translatedText, mode]);
+  }, [hydrated, inputText, translatedText, mode]);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -124,75 +133,19 @@ export default function EditorPage() {
         body: JSON.stringify({ text }),
       });
 
-      if (!res.ok || !res.body) {
+      if (!res.ok) {
         setMode("input");
         showToast("Translation failed — please try again.");
         return;
       }
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let full = "";
+      const full = await res.text();
+      setTranslatedText(full);
       setMode("result");
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        full += decoder.decode(value, { stream: true });
-        setTranslatedText(full);
-      }
-
-      const vocab = extractVocab(full);
-      setVocabSuggestions(vocab);
-      fetchExplanations(text, full);
-      fetchVocabDrafts(vocab);
+      setVocabSuggestions(extractVocab(full));
     } catch {
       setMode("input");
       showToast("Translation failed — please try again.");
-    }
-  }
-
-  /**
-   * Pre-generates flashcard content for all vocabulary suggestions in one
-   * batched model call, so "+ Add" can persist instantly without a fresh
-   * (and independently fail-able) model call per click. Best-effort: on
-   * failure, words are simply missing from the cache and "+ Add" falls back
-   * to generating on demand.
-   */
-  async function fetchVocabDrafts(words: string[]) {
-    if (words.length === 0) return;
-    try {
-      const res = await fetch("/api/vocab-flashcards", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ words }),
-      });
-      if (!res.ok) return;
-      const data = (await res.json()) as { cards?: GeneratedFlashcard[] };
-      const drafts: Record<string, GeneratedFlashcard> = {};
-      for (const card of data.cards ?? []) drafts[card.word.toLowerCase()] = card;
-      setVocabDrafts(drafts);
-    } catch {
-      // best-effort — "+ Add" falls back to generating on demand
-    }
-  }
-
-  async function fetchExplanations(original: string, corrected: string) {
-    setExplanationsLoading(true);
-    try {
-      const res = await fetch("/api/explain-changes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ original, corrected }),
-      });
-      if (res.ok) {
-        const data = (await res.json()) as { items?: ChangeExplanation[] };
-        setExplanations(data.items ?? []);
-      }
-    } catch {
-      // best-effort — explanations are a nice-to-have, never block the result
-    } finally {
-      setExplanationsLoading(false);
     }
   }
 
@@ -205,7 +158,7 @@ export default function EditorPage() {
     setExplanations([]);
     setExpandedExplanation(null);
     setResultView("inline");
-    try { sessionStorage.removeItem(SESSION_KEY); } catch {}
+    try { sessionStorage.removeItem(SESSION_KEY); } catch { }
   }
 
   React.useEffect(() => {
@@ -223,7 +176,7 @@ export default function EditorPage() {
   }, [mode]);
 
   function handleCopy() {
-    navigator.clipboard.writeText(translatedText).catch(() => {});
+    navigator.clipboard.writeText(translatedText).catch(() => { });
     setCopyDone(true);
     setTimeout(() => setCopyDone(false), 1500);
   }
@@ -306,7 +259,7 @@ export default function EditorPage() {
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 spellCheck={false}
-                placeholder="Paste or type your text here… (tiếng Việt or English or cả hai đều được)"
+                placeholder="Paste or type your text here…"
                 disabled={mode === "loading"}
                 style={{
                   flex: 1,

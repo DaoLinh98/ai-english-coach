@@ -6,8 +6,8 @@ import type {
 } from "./schema";
 
 /**
- * Provider-agnostic interface for the AI engine. The Gemini implementation
- * lives in `gemini.ts`; swapping providers (or mocking in tests) only means
+ * Provider-agnostic interface for the AI engine. The Ollama implementation
+ * lives in `ollama.ts`; swapping providers (or mocking in tests) only means
  * supplying another `AiProvider`. All implementations run server-side only.
  */
 

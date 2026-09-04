@@ -442,8 +442,8 @@ export function FlashcardsScreen({
   const [isCorrect, setIsCorrect] = React.useState(false);
   const [, startTransition] = React.useTransition();
 
-  const knownCount = cards.filter((c) => c.learned).length;
-  const dueCount = cards.filter((c) => isDue(c.dueDate)).length;
+  const knownCount = React.useMemo(() => cards.filter((c) => c.learned).length, [cards]);
+  const dueCount = React.useMemo(() => cards.filter((c) => isDue(c.dueDate)).length, [cards]);
 
   const tagOptions: SegOption[] = React.useMemo(() => {
     const tags = Array.from(new Set(cards.map((c) => c.tag).filter((t): t is string => !!t))).sort();
@@ -455,7 +455,7 @@ export function FlashcardsScreen({
     ];
   }, [cards]);
 
-  const filtered = cards.filter((c) => {
+  const filtered = React.useMemo(() => cards.filter((c) => {
     const matchLevel = filter === "all" || c.level === filter;
     const matchTag =
       tagFilter === "all" ||
@@ -463,9 +463,20 @@ export function FlashcardsScreen({
     const matchSearch = !search || c.word.toLowerCase().includes(search.toLowerCase());
     const matchDue = dueFilter === "all" || isDue(c.dueDate);
     return matchLevel && matchTag && matchSearch && matchDue;
-  });
+  }), [cards, filter, tagFilter, search, dueFilter]);
 
   const card = filtered[idx];
+
+  // Cap the nav-dots strip to a window around the current card — rendering
+  // one dot per card froze the tab once a deck grew into the hundreds.
+  const DOT_WINDOW_SIZE = 15;
+  const dotWindow = React.useMemo(() => {
+    const half = Math.floor(DOT_WINDOW_SIZE / 2);
+    let start = Math.max(0, idx - half);
+    const end = Math.min(filtered.length, start + DOT_WINDOW_SIZE);
+    start = Math.max(0, end - DOT_WINDOW_SIZE);
+    return Array.from({ length: end - start }, (_, i) => start + i);
+  }, [idx, filtered.length]);
 
   function resetSession() {
     setIdx(0);
@@ -728,22 +739,25 @@ export function FlashcardsScreen({
               />
             )}
 
-            {/* Navigation dots */}
+            {/* Navigation dots — windowed around the current card so large decks don't render one node per card */}
             <div style={{ display: "flex", justifyContent: "center", gap: 6, margin: "16px 0 12px" }}>
-              {filtered.map((c, i) => (
-                <div
-                  key={c.id}
-                  onClick={() => { setIdx(i); setFlipped(false); setTypedAnswer(""); setChecked(false); setIsCorrect(false); }}
-                  style={{
-                    width: i === idx ? 20 : 7,
-                    height: 7,
-                    borderRadius: "var(--rmax)",
-                    cursor: "pointer",
-                    background: known.has(c.id) || c.learned ? "var(--green)" : i === idx ? "var(--amber)" : "var(--border)",
-                    transition: "all var(--base)",
-                  }}
-                />
-              ))}
+              {dotWindow.map((i) => {
+                const c = filtered[i];
+                return (
+                  <div
+                    key={c.id}
+                    onClick={() => { setIdx(i); setFlipped(false); setTypedAnswer(""); setChecked(false); setIsCorrect(false); }}
+                    style={{
+                      width: i === idx ? 20 : 7,
+                      height: 7,
+                      borderRadius: "var(--rmax)",
+                      cursor: "pointer",
+                      background: known.has(c.id) || c.learned ? "var(--green)" : i === idx ? "var(--amber)" : "var(--border)",
+                      transition: "all var(--base)",
+                    }}
+                  />
+                );
+              })}
             </div>
 
             {/* Prev / Next navigation */}

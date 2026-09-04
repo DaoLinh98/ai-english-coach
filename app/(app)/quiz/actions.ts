@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { getAiProvider, type QuizQuestion } from "@/lib/ai";
 import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -10,7 +12,7 @@ async function requireUser() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
-  return { supabase, user };
+  return { user };
 }
 
 export type QuizPayload = { quizId: string; questions: QuizQuestion[] };
@@ -20,43 +22,42 @@ export type QuizPayload = { quizId: string; questions: QuizQuestion[] };
  * correction mistakes, persist it, and return it for the client to take.
  */
 export async function generateQuiz(): Promise<QuizPayload> {
-  const { supabase, user } = await requireUser();
+  const { user } = await requireUser();
 
-  const { data: cards } = await supabase
-    .from("flashcards")
-    .select("word")
-    .eq("user_id", user.id)
-    .limit(15);
-  const vocab = (cards ?? []).map((c: { word: string }) => c.word);
+  const cards = await prisma.flashcard.findMany({
+    where: { userId: user.id },
+    select: { word: true },
+    take: 15,
+  });
+  const vocab = cards.map((c) => c.word);
 
-  const { data: hist } = await supabase
-    .from("correction_history")
-    .select("id")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
-    .limit(5);
-  const ids = (hist ?? []).map((h: { id: string }) => h.id);
+  const hist = await prisma.correctionHistory.findMany({
+    where: { userId: user.id },
+    select: { id: true },
+    orderBy: { createdAt: "desc" },
+    take: 5,
+  });
+  const ids = hist.map((h) => h.id);
 
   let mistakes: string[] = [];
   if (ids.length) {
-    const { data: items } = await supabase
-      .from("correction_items")
-      .select("find,suggest")
-      .in("history_id", ids)
-      .limit(15);
-    mistakes = (items ?? []).map(
-      (i: { find: string; suggest: string }) => `${i.find} → ${i.suggest}`,
-    );
+    const items = await prisma.correctionItem.findMany({
+      where: { historyId: { in: ids } },
+      select: { find: true, suggest: true },
+      take: 15,
+    });
+    mistakes = items.map((i) => `${i.find} → ${i.suggest}`);
   }
 
   const quiz = await getAiProvider().generateQuiz({ vocab, mistakes, count: 5 });
 
-  const { data: row, error } = await supabase
-    .from("quizzes")
-    .insert({ user_id: user.id, questions: quiz.questions })
-    .select("id")
-    .single();
-  if (error || !row) throw new Error(error?.message ?? "Failed to save quiz");
+  const row = await prisma.quiz.create({
+    data: {
+      userId: user.id,
+      questions: quiz.questions as unknown as Prisma.InputJsonValue,
+    },
+    select: { id: true },
+  });
 
   return { quizId: row.id, questions: quiz.questions };
 }
@@ -67,13 +68,15 @@ export async function recordAttempt(
   total: number,
   answers: unknown,
 ) {
-  const { supabase, user } = await requireUser();
-  await supabase.from("quiz_attempts").insert({
-    quiz_id: quizId,
-    user_id: user.id,
-    score,
-    total,
-    answers,
+  const { user } = await requireUser();
+  await prisma.quizAttempt.create({
+    data: {
+      quizId,
+      userId: user.id,
+      score,
+      total,
+      answers: answers as Prisma.InputJsonValue,
+    },
   });
   revalidatePath("/quiz");
 }

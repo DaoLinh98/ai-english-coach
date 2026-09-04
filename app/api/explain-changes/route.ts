@@ -1,26 +1,6 @@
-import { GoogleGenAI } from "@google/genai";
 import { changeExplanationResultSchema } from "@/lib/ai/schema";
 import { buildChangeExplanationPrompt, stripFences } from "@/lib/ai/prompts";
 import { ollamaChatJson } from "@/lib/ai/ollama";
-
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
-
-async function generateWithGemini(prompt: string): Promise<string> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not set");
-  }
-  const ai = new GoogleGenAI({ apiKey });
-  const response = await ai.models.generateContent({
-    model: MODEL,
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      temperature: 0.2,
-    },
-  });
-  return response.text ?? "";
-}
 
 export async function POST(req: Request) {
   try {
@@ -33,10 +13,7 @@ export async function POST(req: Request) {
     }
 
     const prompt = buildChangeExplanationPrompt(original, corrected);
-    const raw =
-      process.env.AI_PROVIDER === "ollama"
-        ? await ollamaChatJson(prompt, 0.2)
-        : await generateWithGemini(prompt);
+    const raw = await ollamaChatJson(prompt, 0.2);
 
     let parsed: unknown;
     try {

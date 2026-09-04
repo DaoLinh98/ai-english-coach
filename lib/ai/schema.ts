@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Structured output contracts for the AI layer. Every Gemini call returns
+ * Structured output contracts for the AI layer. Every Ollama call returns
  * JSON validated against these schemas, so screens receive typed objects
  * (never free text). The editor's correction-item shape mirrors the
  * prototype's `CORR` records (minus start/end, which the client computes by

@@ -1,5 +1,5 @@
 import { getSessionUser } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
 import { SignInPrompt } from "@/components/SignInPrompt";
 import {
   DashboardScreen,
@@ -87,41 +87,47 @@ export default async function DashboardPage() {
   let scoreTrend: ScoreTrendPoint[] = [];
 
   try {
-    const supabase = await createClient();
-
-    const { data: hist } = await supabase
-      .from("correction_history")
-      .select("id,context,input_text,output_text,created_at")
-      .eq("user_id", session.id)
-      .order("created_at", { ascending: false })
-      .limit(200);
-    histories = (hist ?? []) as HistoryRow[];
+    const hist = await prisma.correctionHistory.findMany({
+      where: { userId: session.id },
+      select: { id: true, context: true, inputText: true, outputText: true, createdAt: true },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+    histories = hist.map((h) => ({
+      id: h.id,
+      context: h.context,
+      input_text: h.inputText,
+      output_text: h.outputText,
+      created_at: h.createdAt.toISOString(),
+    }));
 
     const ids = histories.map((h) => h.id);
     if (ids.length) {
-      const { data: items } = await supabase
-        .from("correction_items")
-        .select("history_id")
-        .in("history_id", ids);
-      for (const it of (items ?? []) as { history_id: string }[]) {
-        itemCountByHistory.set(it.history_id, (itemCountByHistory.get(it.history_id) ?? 0) + 1);
+      const items = await prisma.correctionItem.findMany({
+        where: { historyId: { in: ids } },
+        select: { historyId: true },
+      });
+      for (const it of items) {
+        itemCountByHistory.set(it.historyId, (itemCountByHistory.get(it.historyId) ?? 0) + 1);
         totalCorrections++;
       }
     }
 
-    const { count: learnedCount } = await supabase
-      .from("flashcards")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", session.id)
-      .eq("learned", true);
-    cardsLearned = learnedCount ?? 0;
+    cardsLearned = await prisma.flashcard.count({
+      where: { userId: session.id, learned: true },
+    });
 
-    const { data: attempts } = await supabase
-      .from("quiz_attempts")
-      .select("id,score,total,created_at")
-      .eq("user_id", session.id)
-      .order("created_at", { ascending: true });
-    const rows = (attempts ?? []) as { id: string; score: number; total: number; created_at: string }[];
+    const attempts = await prisma.quizAttempt.findMany({
+      where: { userId: session.id },
+      select: { id: true, score: true, total: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+    });
+    const rows = attempts.map((r) => ({
+      id: r.id,
+      score: r.score,
+      total: r.total,
+      created_at: r.createdAt.toISOString(),
+    }));
     if (rows.length) {
       const score = rows.reduce((s, r) => s + r.score, 0);
       const total = rows.reduce((s, r) => s + r.total, 0);

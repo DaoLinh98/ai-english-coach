@@ -1,0 +1,113 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// user_id columns reference Supabase Auth's auth.users(id); auth still lives
+// in Supabase, so there's no local Prisma model/FK for users.
+
+model Profile {
+  userId         String   @id @map("user_id")
+  name           String?
+  level          String   @default("intermediate")
+  preferredStyle String   @default("professional") @map("preferred_style")
+  learningGoals  String[] @default([]) @map("learning_goals")
+  weeklyGoal     Int      @default(100) @map("weekly_goal")
+  prefs          Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @map("updated_at")
+
+  @@map("profiles")
+}
+
+model PreferredVocabulary {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  term      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, term])
+  @@map("preferred_vocabulary")
+}
+
+model CorrectionHistory {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  context    String
+  tone       String
+  level      String
+  inputText  String   @map("input_text")
+  outputText String   @map("output_text")
+  createdAt  DateTime @default(now()) @map("created_at")
+  items      CorrectionItem[]
+
+  @@map("correction_history")
+}
+
+model CorrectionItem {
+  id        String            @id @default(uuid())
+  historyId String            @map("history_id")
+  history   CorrectionHistory @relation(fields: [historyId], references: [id], onDelete: Cascade)
+  type      String
+  find      String
+  suggest   String
+  label     String
+  expl      String
+  rule      String
+
+  @@index([historyId])
+  @@map("correction_items")
+}
+
+model Flashcard {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  word         String
+  pos          String?
+  level        String   @default("intermediate")
+  context      String?
+  def          String
+  example      String?
+  synonyms     String[] @default([])
+  learned      Boolean  @default(false)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @map("updated_at")
+  phonetic     String?
+  easeFactor   Float    @default(2.5) @map("ease_factor")
+  intervalDays Int      @default(0) @map("interval_days")
+  reviewCount  Int      @default(0) @map("review_count")
+  dueDate      DateTime @default(now()) @map("due_date") @db.Date
+  tag          String?
+
+  @@index([userId])
+  @@index([userId, dueDate])
+  @@index([userId, tag])
+  @@map("flashcards")
+}
+
+model Quiz {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  questions Json
+  createdAt DateTime @default(now()) @map("created_at")
+  attempts  QuizAttempt[]
+
+  @@map("quizzes")
+}
+
+model QuizAttempt {
+  id        String   @id @default(uuid())
+  quizId    String   @map("quiz_id")
+  quiz      Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  userId    String   @map("user_id")
+  score     Int
+  total     Int
+  answers   Json     @default("[]")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("quiz_attempts")
+}
