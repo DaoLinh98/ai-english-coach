@@ -1,24 +1,9 @@
 "use client";
 
 import React from "react";
-import { Button, EmptyState, Icon, Segmented, Spinner } from "@/components/ui";
-import { addFlashcardDirect } from "@/app/(app)/flashcards/actions";
-import type { ChangeExplanation, GeneratedFlashcard } from "@/lib/ai/schema";
+import { Button, Icon, Segmented, Spinner } from "@/components/ui";
+import type { ChangeExplanation } from "@/lib/ai/schema";
 import { speak } from "@/lib/tts";
-
-const STOP_WORDS = new Set([
-  "the", "and", "that", "have", "this", "with", "from", "they", "will", "been", "their",
-  "what", "when", "make", "like", "time", "just", "into", "than", "then", "some", "could",
-  "other", "would", "there", "more", "also", "about", "which", "after", "before", "because",
-  "should", "between", "through", "during", "always", "often", "never", "every", "without",
-  "however", "although", "therefore", "furthermore", "additionally", "nevertheless",
-  "information", "available", "different", "important", "following", "including",
-  "another", "already", "whether", "together", "something", "everything", "anything",
-  "someone", "anyone", "everyone", "nothing", "within", "across", "against", "around",
-  "these", "those", "where", "while", "since", "still", "being", "having", "doing",
-  "working", "getting", "making", "using", "taking", "giving", "going", "coming", "looking",
-  "please", "thank", "regards", "sincerely", "attached", "ensure", "provide",
-]);
 
 type Mode = "input" | "loading" | "result";
 type ResultView = "inline" | "compare";
@@ -30,16 +15,6 @@ interface EditorState {
 }
 
 const SESSION_KEY = "editorState";
-
-// Adjacent word pairs used to produce meaningless "vocabulary" like "each
-// issue" or "implement issues" — they're grammatically adjacent, not an
-// actual phrase worth learning. Single real words are a far more reliable
-// signal, so that's all we surface.
-function extractVocab(text: string): string[] {
-  const tokens = text.toLowerCase().match(/\b[a-z]+\b/g) ?? [];
-  const singles = [...new Set(tokens.filter((w) => w.length >= 6 && !STOP_WORDS.has(w)))];
-  return singles.slice(0, 10);
-}
 
 function loadSession(): Partial<EditorState> {
   try {
@@ -65,10 +40,6 @@ export default function EditorPage() {
   const [inputText, setInputText] = React.useState<string>("");
   const [translatedText, setTranslatedText] = React.useState<string>("");
   const [mode, setMode] = React.useState<Mode>("input");
-  const [vocabSuggestions, setVocabSuggestions] = React.useState<string[]>([]);
-  const [addedWords, setAddedWords] = React.useState<Set<string>>(new Set());
-  const [addingWords, setAddingWords] = React.useState<Set<string>>(new Set());
-  const [vocabDrafts, setVocabDrafts] = React.useState<Record<string, GeneratedFlashcard>>({});
   const [toast, setToast] = React.useState<string | null>(null);
   const [narrow, setNarrow] = React.useState(false);
   const [copyDone, setCopyDone] = React.useState(false);
@@ -93,10 +64,7 @@ export default function EditorPage() {
   React.useEffect(() => {
     const saved = loadSession();
     if (saved.inputText) setInputText(saved.inputText);
-    if (saved.translatedText) {
-      setTranslatedText(saved.translatedText);
-      setVocabSuggestions(extractVocab(saved.translatedText));
-    }
+    if (saved.translatedText) setTranslatedText(saved.translatedText);
     if (saved.mode && saved.mode !== "loading") setMode(saved.mode);
     setHydrated(true);
   }, []);
@@ -119,9 +87,6 @@ export default function EditorPage() {
 
     setMode("loading");
     setTranslatedText("");
-    setVocabSuggestions([]);
-    setAddedWords(new Set());
-    setVocabDrafts({});
     setExplanations([]);
     setExpandedExplanation(null);
     setResultView("inline");
@@ -156,7 +121,6 @@ export default function EditorPage() {
       }
       full += decoder.decode();
       setTranslatedText(full);
-      setVocabSuggestions(extractVocab(full));
     } catch {
       setMode("input");
       showToast("Translation failed — please try again.");
@@ -166,9 +130,6 @@ export default function EditorPage() {
   function handleReset() {
     setMode("input");
     setTranslatedText("");
-    setVocabSuggestions([]);
-    setAddedWords(new Set());
-    setVocabDrafts({});
     setExplanations([]);
     setExpandedExplanation(null);
     setResultView("inline");
@@ -201,26 +162,6 @@ export default function EditorPage() {
       onEnd: () => setSpeaking(false),
       onError: () => setSpeaking(false),
     });
-  }
-
-  async function handleAddFlashcard(phrase: string) {
-    setAddingWords((prev) => new Set([...prev, phrase]));
-    try {
-      const draft = vocabDrafts[phrase.toLowerCase()];
-      const result = await addFlashcardDirect(phrase, draft);
-      if (result.success) {
-        setAddedWords((prev) => new Set([...prev, phrase]));
-      }
-      showToast(result.message);
-    } catch {
-      showToast("Failed to add — please try again.");
-    } finally {
-      setAddingWords((prev) => {
-        const next = new Set(prev);
-        next.delete(phrase);
-        return next;
-      });
-    }
   }
 
   const wordCount = inputText.trim().split(/\s+/).filter(Boolean).length;
@@ -491,77 +432,6 @@ export default function EditorPage() {
           )}
         </div>
 
-        {/* Vocabulary panel */}
-        <div
-          style={{
-            width: narrow ? "100%" : 300,
-            flexShrink: 0,
-            borderLeft: narrow ? "none" : "1px solid var(--bord2)",
-            borderTop: narrow ? "1px solid var(--bord2)" : "none",
-            overflowY: "auto",
-            background: "var(--surf2)",
-            display: "flex",
-            flexDirection: "column",
-          }}
-        >
-          <div style={{ padding: "14px 16px 10px", borderBottom: "1px solid var(--bord2)", background: "var(--surface)", flexShrink: 0 }}>
-            <p style={{ fontWeight: 700, fontSize: 14, color: "var(--t1)" }}>Vocabulary</p>
-            <p style={{ fontSize: 12, color: "var(--t3)", marginTop: 2 }}>Add new words to your Flashcards</p>
-          </div>
-
-          <div style={{ flex: 1, padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-            {mode === "input" && (
-              <EmptyState
-                icon="book"
-                title="No vocabulary yet"
-                subtitle="Translate your text to see vocabulary suggestions."
-              />
-            )}
-            {mode === "loading" && (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", flex: 1, gap: 10, flexDirection: "column", color: "var(--t3)" }}>
-                <Spinner size={20} color="var(--amber)" />
-                <span style={{ fontSize: 12 }}>Extracting vocabulary…</span>
-              </div>
-            )}
-            {mode === "result" && vocabSuggestions.length === 0 && (
-              <EmptyState
-                icon="check"
-                title="No new vocabulary"
-                subtitle="No notable vocabulary suggestions for this text."
-              />
-            )}
-            {mode === "result" && vocabSuggestions.map((phrase) => {
-              const added = addedWords.has(phrase);
-              const adding = addingWords.has(phrase);
-              return (
-                <div
-                  key={phrase}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    padding: "10px 12px",
-                    background: added ? "var(--green-l)" : "var(--surface)",
-                    border: `1px solid ${added ? "var(--green)" : "var(--bord2)"}`,
-                    borderRadius: "var(--r3)",
-                    transition: "all var(--fast)",
-                  }}
-                >
-                  <span style={{ fontSize: 13, fontWeight: 600, color: added ? "var(--green)" : "var(--t1)", fontFamily: "var(--font)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {phrase}
-                  </span>
-                  {added ? (
-                    <Icon name="check" size={15} color="var(--green)" />
-                  ) : (
-                    <Button size="xs" variant="soft" loading={adding} onClick={() => handleAddFlashcard(phrase)}>
-                      {adding ? "" : "+ Add"}
-                    </Button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
       </div>
 
       {/* Toast */}

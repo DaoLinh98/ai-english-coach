@@ -1,11 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import EditorPage from "./page";
-
-vi.mock("@/app/(app)/flashcards/actions", () => ({
-  addFlashcardDirect: vi.fn(),
-}));
 
 const ORIGINAL_TEXT = "Toi di hoc";
 const CORRECTED_TEXT = "I go to school";
